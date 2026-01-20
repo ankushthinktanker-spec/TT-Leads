@@ -1,0 +1,20 @@
+{
+  "name": "new-project",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "lint:backend": "cd backend && npm run lint",
+    "lint:frontend": "cd frontend && npm run lint",
+    "lint": "npm run lint:backend && npm run lint:frontend",
+    "audit:backend": "cd backend && npm run audit",
+    "audit:frontend": "cd frontend && npm run audit",
+    "audit": "npm run audit:backend && npm run audit:frontend",
+    "ci:check": "npm run lint && npm run audit",
+    "smoke:backend": "cd backend && npm run smoke",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": ""
+}

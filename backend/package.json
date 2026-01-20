@@ -1,0 +1,63 @@
+{
+  "name": "thinktanker-backend",
+  "version": "1.0.0",
+  "description": "ThinkTanker Lead Management System - Backend API",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "nodemon src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "create-admin": "node scripts/createAdmin.js",
+    "reset-admin": "ts-node src/scripts/resetAdmin.ts",
+    "seed": "ts-node src/scripts/seed.ts",
+    "seed-leads": "ts-node src/scripts/seedLeads.ts",
+    "backfill-lead-analytics": "ts-node src/scripts/backfillLeadAnalytics.ts",
+    "lint": "eslint . --ext .ts",
+    "audit": "npm audit --omit=dev",
+    "test": "jest",
+    "smoke": "node scripts/smoke.js"
+  },
+  "keywords": [
+    "lead-management",
+    "crm",
+    "sales"
+  ],
+  "author": "ThinkTanker",
+  "license": "ISC",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "date-fns": "^3.0.0",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "express-async-errors": "^3.1.1",
+    "express-rate-limit": "^7.1.5",
+    "helmet": "^7.1.0",
+    "joi": "^17.11.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.0.0",
+    "multer": "^1.4.5-lts.1",
+    "nodemailer": "^7.0.12",
+    "pino": "^9.4.0",
+    "pino-http": "^9.0.0",
+    "puppeteer": "^24.31.0",
+    "sanitize-html": "^2.13.0"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.5",
+    "@types/multer": "^1.4.11",
+    "@types/node": "^20.10.0",
+    "@types/nodemailer": "^6.4.14",
+    "@types/sanitize-html": "^2.11.8",
+    "@typescript-eslint/eslint-plugin": "^6.13.2",
+    "@typescript-eslint/parser": "^6.13.2",
+    "eslint": "^8.55.0",
+    "nodemon": "^3.0.2",
+    "pino-pretty": "^11.2.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.2"
+  }
+}

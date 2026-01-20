@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 18
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+
+      - name: Install root deps
+        run: npm install
+
+      - name: Install backend deps
+        run: npm install
+        working-directory: backend
+
+      - name: Install frontend deps
+        run: npm install
+        working-directory: frontend
+
+      - name: Lint + audit
+        run: npm run ci:check
+
+      - name: Backend tests
+        run: npm test -- --runInBand
+        working-directory: backend
+
+      - name: Frontend tests (if present)
+        run: npm test --if-present
+        working-directory: frontend
+
+      - name: Backend smoke test (optional)
+        if: ${{ secrets.SMOKE_EMAIL != '' && secrets.SMOKE_PASSWORD != '' }}
+        env:
+          SMOKE_EMAIL: ${{ secrets.SMOKE_EMAIL }}
+          SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}
+          SMOKE_BASE_URL: ${{ secrets.SMOKE_BASE_URL }}
+        run: npm run smoke
+        working-directory: backend
