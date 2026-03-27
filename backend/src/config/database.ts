@@ -1,8 +1,9 @@
 import mongoose from 'mongoose';
+import { env } from './env';
 
 const connectDB = async (): Promise<void> => {
     try {
-        const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/thinktanker-leads';
+        const mongoURI = env.MONGODB_URI;
 
         await mongoose.connect(mongoURI);
 
@@ -10,7 +11,7 @@ const connectDB = async (): Promise<void> => {
         console.log(`Database: ${mongoose.connection.name}`);
     } catch (error) {
         console.error('MongoDB connection error:', error);
-        process.exit(1);
+        throw error;
     }
 };
 

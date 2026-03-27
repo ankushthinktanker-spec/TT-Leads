@@ -1,79 +1,67 @@
-﻿import { Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
 import Lead, { ILead } from '../models/lead.model';
-import LeadStageHistory from '../models/lead-stage-history.model';
 import User from '../models/user.model';
-import Activity from '../models/activity.model';
-import LeadActivity from '../models/lead-activity.model';
-import mongoose, { FilterQuery } from 'mongoose';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth.middleware';
-import {
-    createLeadSchema,
-    updateLeadSchema,
-    updateLeadStatusSchema,
-    assignLeadSchema
-} from '../validators/lead.validator';
+import { createLeadSchema, updateLeadSchema, updateLeadStatusSchema, assignLeadSchema } from '../validators/lead.validator';
+import mongoose, { FilterQuery } from 'mongoose';
+import { leadRepository } from '../repositories/lead.repository';
+import LeadStageHistory from '../models/lead-stage-history.model';
+import LeadActivity from '../models/lead-activity.model';
+import Activity from '../models/activity.model';
+import { queue } from '../services/queue.service';
+import { JobType } from '../jobs/job.types';
+import { writeAuditLog } from '../services/audit.service';
 
-const getLeadHealth = (nextFollowUpDate?: Date | null): 'UNHEALTHY' | 'OVERDUE' | 'DUE_TODAY' | 'SCHEDULED' => {
-    if (!nextFollowUpDate) {
-        return 'UNHEALTHY';
-    }
+/**
+ * Utility to calculate lead health based on follow-up dates
+ */
+const getLeadHealth = (nextFollowUpDate?: Date): string => {
+    if (!nextFollowUpDate) return 'Cold';
     const now = new Date();
-    const startOfToday = new Date(now);
-    startOfToday.setHours(0, 0, 0, 0);
-    const endOfToday = new Date(now);
-    endOfToday.setHours(23, 59, 59, 999);
+    const followUp = new Date(nextFollowUpDate);
+    const diffDays = (followUp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
 
-    if (nextFollowUpDate < startOfToday) {
-        return 'OVERDUE';
-    }
-    if (nextFollowUpDate >= startOfToday && nextFollowUpDate <= endOfToday) {
-        return 'DUE_TODAY';
-    }
-    return 'SCHEDULED';
+    if (diffDays < 0) return 'Overdue';
+    if (diffDays <= 2) return 'Hot';
+    if (diffDays <= 7) return 'Warm';
+    return 'Cold';
 };
 
-type LeadOwnerRef = {
-    _id?: unknown;
-    firstName?: string;
-    lastName?: string;
-    email?: string;
-} | null;
-
-type LeadPlain = ILead & {
-    ownerId?: LeadOwnerRef;
-    assignedTo?: LeadOwnerRef;
-    createdBy?: LeadOwnerRef;
+interface LeadPlain extends Record<string, any> {
+    _id: mongoose.Types.ObjectId;
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone: string;
+    company: string;
+    status: string;
+    priority: string;
+    source: string;
+    assignedTo?: any;
+    ownerId?: any;
+    createdBy: mongoose.Types.ObjectId;
+    nextFollowUpDate?: Date;
     leadHealth?: string;
+}
+
+type LeadFilter = FilterQuery<ILead> & {
+    $or?: any[];
 };
 
-type LeadFilter = FilterQuery<ILead>;
-
-const applyOrFilter = (filter: LeadFilter, orClause: LeadFilter[]) => {
-    if (filter.$or) {
-        const existingAnd = Array.isArray(filter.$and) ? filter.$and : [];
-        const existingOr = Array.isArray(filter.$or) ? filter.$or : [];
-        filter.$and = [...existingAnd, { $or: existingOr }, { $or: orClause }];
-        delete filter.$or;
-        return filter;
-    }
-    filter.$or = orClause;
-    return filter;
+const applyOrFilter = (filter: LeadFilter, conditions: any[]) => {
+    if (!filter.$or) filter.$or = [];
+    filter.$or.push(...conditions);
 };
 
-const mapFollowUpTypeToActivity = (value?: string) => {
-    switch (value) {
-        case 'CALL':
-            return 'Call';
-        case 'WHATSAPP':
-            return 'WhatsApp';
-        case 'EMAIL':
-            return 'Email';
-        case 'MEETING':
-            return 'Meeting';
-        default:
-            return 'Note';
-    }
+const mapFollowUpTypeToActivity = (type?: string): 'Call' | 'Meeting' | 'Email' | 'WhatsApp' | 'Note' => {
+    if (!type) return 'Call';
+    const t = type.toLowerCase();
+    if (t.includes('call')) return 'Call';
+    if (t.includes('meeting')) return 'Meeting';
+    if (t.includes('email')) return 'Email';
+    if (t.includes('whatsapp')) return 'WhatsApp';
+    return 'Note';
 };
 
 // @desc    Get all leads
@@ -89,69 +77,49 @@ export const getLeads = async (
             page = 1,
             limit = 10,
             status,
-            source,
             priority,
+            source,
             assignedTo,
             ownerId,
-            due,
-            search,
+            startDate,
+            endDate,
             sortBy = 'createdAt',
-            sortOrder = 'desc'
+            sortOrder = 'desc',
+            search
         } = req.query;
 
-        // Build filter
-        const filter: LeadFilter = {};
+        // Build filter - Critical Tenant Isolation
+        const filter: LeadFilter = { tenantId: req.tenantId! };
 
-        // Role-based filtering
+        // RBAC constraints on visibility
         if (req.user!.role === 'BDM' || req.user!.role === 'User') {
             filter.assignedTo = req.user!._id;
-        } else if (req.user!.role === 'Manager' && req.user!.teamId) {
-            // Get team members
-            const teamMembers = await User.find({ teamId: req.user!.teamId }).select('_id');
-            filter.assignedTo = { $in: teamMembers.map(m => m._id) };
+        } else if (assignedTo) {
+            filter.assignedTo = assignedTo;
         }
 
         if (status) filter.status = status;
-        if (source) filter.source = source;
         if (priority) filter.priority = priority;
-        if (assignedTo) filter.assignedTo = assignedTo;
+        if (source) filter.source = source;
+        if (ownerId) filter.ownerId = ownerId;
 
-        // Search
+        // Date range filter
+        if (startDate || endDate) {
+            const dateFilter: any = {};
+            if (startDate) dateFilter.$gte = new Date(startDate as string);
+            if (endDate) dateFilter.$lte = new Date(endDate as string);
+            filter.createdAt = dateFilter;
+        }
+
+        // Search filter
         if (search) {
-            filter.$or = [
-                { firstName: { $regex: search, $options: 'i' } },
-                { lastName: { $regex: search, $options: 'i' } },
-                { email: { $regex: search, $options: 'i' } },
-                { company: { $regex: search, $options: 'i' } },
-                { phone: { $regex: search, $options: 'i' } }
-            ];
-        }
-
-        if (ownerId) {
-            applyOrFilter(filter, [{ ownerId }, { assignedTo: ownerId }]);
-        }
-
-        if (due) {
-            const now = new Date();
-            const startOfToday = new Date(now);
-            startOfToday.setHours(0, 0, 0, 0);
-            const endOfToday = new Date(now);
-            endOfToday.setHours(23, 59, 59, 999);
-
-            if (due === 'unhealthy') {
-                applyOrFilter(filter, [
-                    { nextFollowUpDate: { $exists: false } },
-                    { nextFollowUpDate: null }
-                ]);
-            } else if (due === 'overdue') {
-                filter.nextFollowUpDate = { $lt: startOfToday };
-            } else if (due === 'today') {
-                filter.nextFollowUpDate = { $gte: startOfToday, $lte: endOfToday };
-            } else if (due === 'upcoming') {
-                const upcomingEnd = new Date(endOfToday);
-                upcomingEnd.setDate(upcomingEnd.getDate() + 7);
-                filter.nextFollowUpDate = { $gt: endOfToday, $lte: upcomingEnd };
-            }
+            const searchRegex = new RegExp(search as string, 'i');
+            applyOrFilter(filter, [
+                { firstName: searchRegex },
+                { lastName: searchRegex },
+                { email: searchRegex },
+                { companyName: searchRegex }
+            ]);
         }
 
         // Pagination
@@ -160,8 +128,8 @@ export const getLeads = async (
         sort[sortBy as string] = sortOrder === 'asc' ? 1 : -1;
 
         const leads = await Lead.find(filter)
-            .select('firstName lastName email phone company status source priority dealValue assignedTo ownerId createdBy createdAt nextFollowUpDate followUpType')
-            .populate('assignedTo', 'firstName lastName email')
+            .populate('assignedTo', 'firstName lastName email avatar')
+            .populate('ownerId', 'firstName lastName email')
             .populate('createdBy', 'firstName lastName email')
             .sort(sort)
             .skip(skip)
@@ -170,10 +138,10 @@ export const getLeads = async (
         const total = await Lead.countDocuments(filter);
 
         const leadsWithHealth = leads.map((lead) => {
-        const data = lead.toObject() as LeadPlain;
-            data.leadHealth = getLeadHealth(data.nextFollowUpDate);
-            data.ownerId = data.ownerId || data.assignedTo || data.createdBy;
-            return data;
+            const leadData = lead.toObject() as LeadPlain;
+            leadData.leadHealth = getLeadHealth(leadData.nextFollowUpDate);
+            leadData.ownerId = leadData.ownerId || leadData.assignedTo || leadData.createdBy;
+            return leadData;
         });
 
         res.status(200).json({
@@ -202,13 +170,18 @@ export const getLead = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        const lead = await Lead.findById(req.params.id)
-            .populate('assignedTo', 'firstName lastName email avatar')
+        if (!mongoose.isValidObjectId(req.params.id)) {
+            throw new AppError('Invalid lead identifier', 400);
+        }
+
+        const lead = await Lead.findOne({ _id: req.params.id, tenantId: req.tenantId! })
+            .populate('assignedTo', 'firstName lastName email avatar status leadsAssigned')
+            .populate('ownerId', 'firstName lastName email')
             .populate('createdBy', 'firstName lastName email')
             .populate('teamId', 'name');
 
         if (!lead) {
-            throw new AppError('Lead not found', 404);
+            throw new AppError('Lead not found or unauthorized access', 404);
         }
 
         // Check access
@@ -244,16 +217,17 @@ export const createLead = async (
             throw new AppError(error.details[0].message, 400);
         }
 
-        // Check for duplicate email or phone
+        // Check for duplicate email or phone - Multi-Tenant safe check
         const existingLead = await Lead.findOne({
+            tenantId: req.tenantId!,
             $or: [{ email: value.email }, { phone: value.phone }]
         });
 
         if (existingLead) {
-            throw new AppError('Lead with this email or phone already exists', 400);
+            throw new AppError('Lead with this email or phone already exists in your organization', 400);
         }
 
-        const nextFollowUpDate = value.nextFollowUpDate || value.nextFollowUpAt;
+        const nextFollowUpDate = value.nextFollowUpAt || value.nextFollowUpDate;
         if (!nextFollowUpDate) {
             throw new AppError('Next follow-up date is required', 400);
         }
@@ -262,17 +236,19 @@ export const createLead = async (
 
         let teamId = value.teamId;
         if (assignedTo) {
+            // Securely find user within tenant boundaries
             const assignedUser = assignedTo.toString() === req.user!._id.toString()
                 ? req.user!
-                : await User.findById(assignedTo);
+                : await User.findOne({ _id: assignedTo, tenantId: req.tenantId! });
+
             if (!assignedUser) {
-                throw new AppError('Assigned user not found', 404);
+                throw new AppError('Assigned user not found in your organization', 404);
             }
-            teamId = assignedUser.teamId;
+            teamId = (assignedUser as any).teamId;
         }
 
-        // Create lead
-        const lead = await Lead.create({
+        // Create lead via Multi-Tenant safe repository
+        const lead = await leadRepository.create(req.tenantId!, {
             ...value,
             teamId,
             ownerId,
@@ -281,12 +257,34 @@ export const createLead = async (
             createdBy: req.user!._id
         });
 
-        // Update user stats if assigned
-        if (assignedTo) {
-            await User.findByIdAndUpdate(assignedTo, {
-                $inc: { leadsAssigned: 1 }
+        // 📍 Notification Queue
+        if (assignedTo && value.email) {
+            queue.enqueue(JobType.SEND_EMAIL, {
+                to: value.email,
+                subject: 'Lead Inquiry Acknowledged',
+                htmlContent: `<h3>Hello ${value.firstName},</h3><p>Your inquiry has been successfully received by our team and assigned to a consultant who will reach out shortly.</p>`,
+                tenantId: req.tenantId!
             });
         }
+
+        // Update user stats safely
+        if (assignedTo) {
+            await User.findOneAndUpdate(
+                { _id: assignedTo, tenantId: req.tenantId! },
+                { $inc: { leadsAssigned: 1 } }
+            );
+        }
+
+        // 📍 SECURITY: Audit Log Creation
+        await writeAuditLog({
+            tenantId: req.tenantId!,
+            actorId: req.user!._id.toString(),
+            action: 'CREATE',
+            entityType: 'Lead',
+            entityId: lead._id.toString(),
+            ip: req.ip,
+            changes: lead.toObject() as any
+        });
 
         const leadData = lead.toObject() as LeadPlain;
         leadData.leadHealth = getLeadHealth(leadData.nextFollowUpDate);
@@ -310,15 +308,18 @@ export const updateLead = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        // Validate request body
+        if (!mongoose.isValidObjectId(req.params.id)) {
+            throw new AppError('Invalid lead identifier', 400);
+        }
+
         const { error, value } = updateLeadSchema.validate(req.body);
         if (error) {
             throw new AppError(error.details[0].message, 400);
         }
 
-        const lead = await Lead.findById(req.params.id);
+        const lead = await Lead.findOne({ _id: req.params.id, tenantId: req.tenantId! });
         if (!lead) {
-            throw new AppError('Lead not found', 404);
+            throw new AppError('Lead not found or unauthorized access', 404);
         }
 
         // Check access
@@ -326,24 +327,11 @@ export const updateLead = async (
             throw new AppError('Not authorized to update this lead', 403);
         }
 
-        if (value.email || value.phone) {
-            const existingLead = await Lead.findOne({
-                _id: { $ne: lead._id },
-                $or: [
-                    ...(value.email ? [{ email: value.email }] : []),
-                    ...(value.phone ? [{ phone: value.phone }] : [])
-                ]
-            });
-
-            if (existingLead) {
-                throw new AppError('Lead with this email or phone already exists', 400);
-            }
-        }
-
         const previousStatus = lead.status;
         const previousFollowUp = lead.nextFollowUpDate ? lead.nextFollowUpDate.toISOString() : null;
         const previousFollowUpType = lead.followUpType || null;
-        const updateValue: Record<string, unknown> = { ...value };
+
+        const updateValue = { ...value };
         if (value.nextFollowUpAt && !value.nextFollowUpDate) {
             updateValue.nextFollowUpDate = value.nextFollowUpAt;
         }
@@ -353,6 +341,10 @@ export const updateLead = async (
         if (value.assignedTo && !value.ownerId) {
             updateValue.ownerId = value.assignedTo;
         }
+        if (value.status && value.status !== previousStatus) {
+            updateValue.lastStageChangedAt = new Date();
+        }
+
         const update: { $set: Record<string, unknown>; $unset?: Record<string, unknown> } = { $set: updateValue };
         if (value.status && value.status !== 'Lost') {
             update.$unset = { lostReason: '' };
@@ -364,53 +356,71 @@ export const updateLead = async (
 
             if (!newAssignedTo) {
                 if (previousAssignedTo) {
-                    await User.findByIdAndUpdate(previousAssignedTo, {
-                        $inc: { leadsAssigned: -1 }
-                    });
+                    await User.findOneAndUpdate(
+                        { _id: previousAssignedTo, tenantId: req.tenantId! },
+                        { $inc: { leadsAssigned: -1 } }
+                    );
                 }
                 update.$set.teamId = null;
             } else if (newAssignedTo.toString() !== previousAssignedTo) {
-                const assignedUser = await User.findById(newAssignedTo);
+                const assignedUser = await User.findOne({ _id: newAssignedTo, tenantId: req.tenantId! });
                 if (!assignedUser) {
-                    throw new AppError('Assigned user not found', 404);
+                    throw new AppError('Assigned user not found in your organization', 404);
                 }
 
                 if (previousAssignedTo) {
-                    await User.findByIdAndUpdate(previousAssignedTo, {
-                        $inc: { leadsAssigned: -1 }
-                    });
+                    await User.findOneAndUpdate(
+                        { _id: previousAssignedTo, tenantId: req.tenantId! },
+                        { $inc: { leadsAssigned: -1 } }
+                    );
                 }
 
-                await User.findByIdAndUpdate(newAssignedTo, {
-                    $inc: { leadsAssigned: 1 }
-                });
-                update.$set.teamId = assignedUser.teamId;
+                await User.findOneAndUpdate(
+                    { _id: newAssignedTo, tenantId: req.tenantId! },
+                    { $inc: { leadsAssigned: 1 } }
+                );
+                update.$set.teamId = (assignedUser as any).teamId;
             }
         }
 
-        // Update lead
-        const updatedLead = await Lead.findByIdAndUpdate(
-            req.params.id,
+        // Update lead securely
+        const updatedLead = await Lead.findOneAndUpdate(
+            { _id: req.params.id, tenantId: req.tenantId! },
             update,
             { new: true, runValidators: true }
         ).populate('assignedTo', 'firstName lastName email');
 
-        const updatedLeadData = updatedLead?.toObject() as LeadPlain;
-        if (updatedLeadData) {
-            updatedLeadData.leadHealth = getLeadHealth(updatedLeadData.nextFollowUpDate);
-            updatedLeadData.ownerId = updatedLeadData.ownerId || updatedLeadData.assignedTo || updatedLeadData.createdBy;
+        if (!updatedLead) {
+            throw new AppError('Update failed: Lead not found', 404);
         }
 
-        const nextFollowUpIso = updatedLead?.nextFollowUpDate ? updatedLead.nextFollowUpDate.toISOString() : null;
-        const nextFollowUpType = updatedLead?.followUpType || null;
+        // 📍 SECURITY: Audit Log Update
+        await writeAuditLog({
+            tenantId: req.tenantId!,
+            actorId: req.user!._id.toString(),
+            action: 'UPDATE',
+            entityType: 'Lead',
+            entityId: updatedLead._id.toString(),
+            ip: req.ip,
+            changes: { before: lead.toObject() as any, after: updatedLead.toObject() as any }
+        });
+
+        const updatedLeadData = updatedLead.toObject() as LeadPlain;
+        updatedLeadData.leadHealth = getLeadHealth(updatedLeadData.nextFollowUpDate);
+        updatedLeadData.ownerId = updatedLeadData.ownerId || updatedLeadData.assignedTo || updatedLeadData.createdBy;
+
+        const nextFollowUpIso = updatedLead.nextFollowUpDate ? updatedLead.nextFollowUpDate.toISOString() : null;
+        const nextFollowUpType = updatedLead.followUpType || null;
+
         if (nextFollowUpIso !== previousFollowUp || nextFollowUpType !== previousFollowUpType) {
             await LeadActivity.create({
+                tenantId: req.tenantId!,
                 leadId: lead._id,
                 type: 'FOLLOWUP_SCHEDULED',
                 message: 'Follow-up updated',
                 meta: {
-                    followUpAt: updatedLead?.nextFollowUpDate || null,
-                    followUpType: updatedLead?.followUpType || null,
+                    followUpAt: updatedLead.nextFollowUpDate || null,
+                    followUpType: updatedLead.followUpType || null,
                     previousFollowUpAt: previousFollowUp
                 },
                 createdBy: req.user!._id
@@ -418,8 +428,8 @@ export const updateLead = async (
         }
 
         if (value.status && value.status !== previousStatus) {
-            update.$set.lastStageChangedAt = new Date();
             await LeadStageHistory.create({
+                tenantId: req.tenantId!,
                 leadId: lead._id,
                 fromStatus: previousStatus,
                 toStatus: value.status,
@@ -427,6 +437,7 @@ export const updateLead = async (
                 changedAt: new Date()
             });
             await LeadActivity.create({
+                tenantId: req.tenantId!,
                 leadId: lead._id,
                 type: 'STAGE_CHANGE',
                 message: `Stage changed from ${previousStatus} to ${value.status}`,
@@ -438,7 +449,7 @@ export const updateLead = async (
         res.status(200).json({
             success: true,
             message: 'Lead updated successfully',
-            data: { lead: updatedLeadData || updatedLead }
+            data: { lead: updatedLeadData }
         });
     } catch (error) {
         next(error);
@@ -454,10 +465,21 @@ export const deleteLead = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        const lead = await Lead.findById(req.params.id);
+        const lead = await Lead.findOne({ _id: req.params.id, tenantId: req.tenantId! });
         if (!lead) {
-            throw new AppError('Lead not found', 404);
+            throw new AppError('Lead not found or unauthorized access', 404);
         }
+
+        // 📍 SECURITY: Audit Log Delete
+        await writeAuditLog({
+            tenantId: req.tenantId!,
+            actorId: req.user!._id.toString(),
+            action: 'DELETE',
+            entityType: 'Lead',
+            entityId: lead._id.toString(),
+            ip: req.ip,
+            changes: lead.toObject() as any
+        });
 
         await lead.deleteOne();
 
@@ -485,9 +507,9 @@ export const updateLeadStatus = async (
             throw new AppError(error.details[0].message, 400);
         }
 
-        const lead = await Lead.findById(req.params.id);
+        const lead = await Lead.findOne({ _id: req.params.id, tenantId: req.tenantId! });
         if (!lead) {
-            throw new AppError('Lead not found', 404);
+            throw new AppError('Lead not found or unauthorized access', 404);
         }
 
         // Check access
@@ -496,6 +518,7 @@ export const updateLeadStatus = async (
         }
 
         const previousStatus = lead.status;
+        const previousLeadState = lead.toObject();
         lead.status = value.status;
         if (previousStatus !== value.status) {
             lead.lastStageChangedAt = new Date();
@@ -503,11 +526,12 @@ export const updateLeadStatus = async (
         if (value.status === 'Won' && previousStatus !== 'Won') {
             lead.convertedAt = new Date();
             lead.closedAt = new Date();
-            // Update user stats
+            // Update user stats safely
             if (lead.assignedTo) {
-                await User.findByIdAndUpdate(lead.assignedTo, {
-                    $inc: { leadsConverted: 1, totalRevenue: lead.dealValue || 0 }
-                });
+                await User.findOneAndUpdate(
+                    { _id: lead.assignedTo, tenantId: req.tenantId! },
+                    { $inc: { leadsConverted: 1, totalRevenue: lead.dealValue || 0 } }
+                );
             }
         } else if (value.status === 'Lost') {
             lead.closedAt = new Date();
@@ -520,6 +544,7 @@ export const updateLeadStatus = async (
 
         if (previousStatus !== value.status) {
             await LeadStageHistory.create({
+                tenantId: req.tenantId!,
                 leadId: lead._id,
                 fromStatus: previousStatus,
                 toStatus: value.status,
@@ -527,6 +552,7 @@ export const updateLeadStatus = async (
                 changedAt: new Date()
             });
             await LeadActivity.create({
+                tenantId: req.tenantId!,
                 leadId: lead._id,
                 type: 'STAGE_CHANGE',
                 message: `Stage changed from ${previousStatus} to ${value.status}`,
@@ -534,6 +560,17 @@ export const updateLeadStatus = async (
                 createdBy: req.user!._id
             });
         }
+
+        // 📍 SECURITY: Audit Log Status Update
+        await writeAuditLog({
+            tenantId: req.tenantId!,
+            actorId: req.user!._id.toString(),
+            action: 'STATUS_UPDATE',
+            entityType: 'Lead',
+            entityId: lead._id.toString(),
+            ip: req.ip,
+            changes: { from: previousStatus, to: value.status, previousLead: previousLeadState as any }
+        });
 
         const leadData = lead.toObject() as LeadPlain;
         leadData.leadHealth = getLeadHealth(leadData.nextFollowUpDate);
@@ -564,33 +601,48 @@ export const assignLead = async (
             throw new AppError(error.details[0].message, 400);
         }
 
-        const lead = await Lead.findById(req.params.id);
+        const lead = await Lead.findOne({ _id: req.params.id, tenantId: req.tenantId! });
         if (!lead) {
-            throw new AppError('Lead not found', 404);
+            throw new AppError('Lead not found or unauthorized access', 404);
         }
 
-        // Check if user exists
-        const user = await User.findById(value.assignedTo);
+        // Check if user exists within tenant boundary
+        const user = await User.findOne({ _id: value.assignedTo, tenantId: req.tenantId! });
         if (!user) {
-            throw new AppError('User not found', 404);
+            throw new AppError('User not found in your organization', 404);
         }
 
-        // Update previous assignee stats
-        if (lead.assignedTo) {
-            await User.findByIdAndUpdate(lead.assignedTo, {
-                $inc: { leadsAssigned: -1 }
-            });
+        const previousAssignedTo = lead.assignedTo;
+
+        // Update previous assignee stats safely
+        if (previousAssignedTo) {
+            await User.findOneAndUpdate(
+                { _id: previousAssignedTo, tenantId: req.tenantId! },
+                { $inc: { leadsAssigned: -1 } }
+            );
         }
 
-        // Update new assignee stats
-        await User.findByIdAndUpdate(value.assignedTo, {
-            $inc: { leadsAssigned: 1 }
-        });
+        // Update new assignee stats safely
+        await User.findOneAndUpdate(
+            { _id: value.assignedTo, tenantId: req.tenantId! },
+            { $inc: { leadsAssigned: 1 } }
+        );
 
         // Update lead
         lead.assignedTo = value.assignedTo;
-        lead.teamId = user.teamId;
+        lead.teamId = (user as any).teamId;
         await lead.save();
+
+        // 📍 SECURITY: Audit Log Assignment
+        await writeAuditLog({
+            tenantId: req.tenantId!,
+            actorId: req.user!._id.toString(),
+            action: 'ASSIGN',
+            entityType: 'Lead',
+            entityId: lead._id.toString(),
+            ip: req.ip,
+            changes: { from: previousAssignedTo as any, to: value.assignedTo }
+        });
 
         res.status(200).json({
             success: true,
@@ -611,7 +663,7 @@ export const getMyLeads = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        const leads = await Lead.find({ assignedTo: req.user!._id })
+        const leads = await Lead.find({ assignedTo: req.user!._id, tenantId: req.tenantId! })
             .populate('createdBy', 'firstName lastName email')
             .sort({ createdAt: -1 });
 
@@ -637,9 +689,9 @@ export const updateLeadFollowUp = async (
             throw new AppError('Invalid lead identifier', 400);
         }
 
-        const lead = await Lead.findById(req.params.id);
+        const lead = await Lead.findOne({ _id: req.params.id, tenantId: req.tenantId! });
         if (!lead) {
-            throw new AppError('Lead not found', 404);
+            throw new AppError('Lead not found or unauthorized access', 404);
         }
 
         if ((req.user!.role === 'BDM' || req.user!.role === 'User') && lead.assignedTo?.toString() !== req.user!._id.toString()) {
@@ -650,6 +702,8 @@ export const updateLeadFollowUp = async (
         const followUpType = req.body.followUpType;
         const note = req.body.note;
         const action = req.body.action || 'reschedule';
+
+        const previousFollowUp = lead.nextFollowUpDate;
 
         if (nextFollowUpDate) {
             lead.nextFollowUpDate = new Date(nextFollowUpDate);
@@ -683,7 +737,9 @@ export const updateLeadFollowUp = async (
                 : action === 'reschedule'
                     ? 'Follow-up rescheduled'
                     : 'Follow-up updated';
+            
             await Activity.create({
+                tenantId: req.tenantId!,
                 activityType,
                 relatedTo: { model: 'Lead', id: lead._id },
                 subject,
@@ -692,7 +748,9 @@ export const updateLeadFollowUp = async (
                 nextFollowUpDate: lead.nextFollowUpDate,
                 createdBy: req.user!._id
             });
+
             await LeadActivity.create({
+                tenantId: req.tenantId!,
                 leadId: lead._id,
                 type: action === 'done' ? 'FOLLOWUP_COMPLETED' : 'FOLLOWUP_SCHEDULED',
                 message: note?.trim() || subject,
@@ -703,12 +761,24 @@ export const updateLeadFollowUp = async (
                 },
                 createdBy: req.user!._id
             });
+
             lead.lastActivityAt = new Date();
             if (!lead.firstResponseAt) {
                 lead.firstResponseAt = new Date();
             }
             await lead.save();
         }
+
+        // 📍 SECURITY: Audit Log Follow-up Update
+        await writeAuditLog({
+            tenantId: req.tenantId!,
+            actorId: req.user!._id.toString(),
+            action: 'FOLLOWUP_UPDATE',
+            entityType: 'Lead',
+            entityId: lead._id.toString(),
+            ip: req.ip,
+            changes: { from: previousFollowUp as any, to: lead.nextFollowUpDate, action }
+        });
 
         const leadData = lead.toObject() as LeadPlain;
         leadData.leadHealth = getLeadHealth(leadData.nextFollowUpDate);
@@ -737,9 +807,9 @@ export const addLeadNote = async (
             throw new AppError('Invalid lead identifier', 400);
         }
 
-        const lead = await Lead.findById(req.params.id);
+        const lead = await Lead.findOne({ _id: req.params.id, tenantId: req.tenantId! });
         if (!lead) {
-            throw new AppError('Lead not found', 404);
+            throw new AppError('Lead not found or unauthorized access', 404);
         }
 
         if ((req.user!.role === 'BDM' || req.user!.role === 'User') && lead.assignedTo?.toString() !== req.user!._id.toString()) {
@@ -752,6 +822,7 @@ export const addLeadNote = async (
         }
 
         const activity = await Activity.create({
+            tenantId: req.tenantId!,
             activityType: 'Note',
             relatedTo: { model: 'Lead', id: lead._id },
             subject: 'Lead note',
@@ -759,7 +830,9 @@ export const addLeadNote = async (
             activityDate: new Date(),
             createdBy: req.user!._id
         });
+
         await LeadActivity.create({
+            tenantId: req.tenantId!,
             leadId: lead._id,
             type: 'NOTE',
             message: note.trim(),
@@ -774,6 +847,17 @@ export const addLeadNote = async (
             lead.ownerId = lead.assignedTo || lead.createdBy;
         }
         await lead.save();
+
+        // 📍 SECURITY: Audit Log Note creation
+        await writeAuditLog({
+            tenantId: req.tenantId!,
+            actorId: req.user!._id.toString(),
+            action: 'NOTE_ADD',
+            entityType: 'Lead',
+            entityId: lead._id.toString(),
+            ip: req.ip,
+            changes: { note: note.trim() }
+        });
 
         res.status(201).json({
             success: true,
@@ -801,6 +885,7 @@ export const getStuckLeads = async (
         const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
         const filter: LeadFilter = {
+            tenantId: req.tenantId!,
             status: { $nin: excludeStages },
             $or: [
                 { lastStageChangedAt: { $lt: cutoff } },
@@ -810,16 +895,20 @@ export const getStuckLeads = async (
         };
 
         if (ownerId) {
-            applyOrFilter(filter, [{ ownerId }, { assignedTo: ownerId }]);
+            // Verify ownerId belongs to the tenant
+            const targetUser = await User.findOne({ _id: ownerId, tenantId: req.tenantId! });
+            if (targetUser) {
+                applyOrFilter(filter, [{ ownerId }, { assignedTo: ownerId }]);
+            }
         } else if (req.user!.role === 'BDM' || req.user!.role === 'User') {
             filter.assignedTo = req.user!._id;
         } else if (req.user!.role === 'Manager' && req.user!.teamId) {
-            const teamMembers = await User.find({ teamId: req.user!.teamId }).select('_id');
+            const teamMembers = await User.find({ teamId: req.user!.teamId, tenantId: req.tenantId! }).select('_id');
             filter.assignedTo = { $in: teamMembers.map(m => m._id) };
         }
 
         const leads = await Lead.find(filter)
-            .select('firstName lastName company status ownerId assignedTo lastStageChangedAt createdAt')
+            .select('firstName lastName companyName status ownerId assignedTo lastStageChangedAt createdAt')
             .populate('ownerId', 'firstName lastName email')
             .populate('assignedTo', 'firstName lastName email')
             .sort({ lastStageChangedAt: 1 })
@@ -831,13 +920,16 @@ export const getStuckLeads = async (
             const lastChangeDate = doc.lastStageChangedAt || doc.createdAt;
             const lastChange = lastChangeDate ? new Date(lastChangeDate).getTime() : now;
             const daysStuck = Math.floor((now - lastChange) / (1000 * 60 * 60 * 24));
-            const owner = doc.ownerId || doc.assignedTo;
+            
+            // Populate logic safety check
+            const owner = (doc.ownerId || doc.assignedTo) as any;
+            
             return {
                 leadId: doc._id,
                 name: `${doc.firstName} ${doc.lastName}`.trim(),
-                company: doc.company,
+                company: (doc as any).companyName || doc.company,
                 stage: doc.status,
-                owner: owner
+                owner: owner && typeof owner === 'object' && owner.firstName
                     ? {
                         _id: owner._id,
                         firstName: owner.firstName,
@@ -858,4 +950,3 @@ export const getStuckLeads = async (
         next(error);
     }
 };
-

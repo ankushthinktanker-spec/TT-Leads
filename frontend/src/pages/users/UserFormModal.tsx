@@ -23,7 +23,7 @@ const UserFormModal: React.FC<UserFormModalProps> = ({ isOpen, onClose, user, on
         phone: '',
         password: '',
         role: 'BDM',
-        status: 'Active'
+        status: 'Active' as 'Active' | 'Inactive'
     });
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -113,7 +113,7 @@ const UserFormModal: React.FC<UserFormModalProps> = ({ isOpen, onClose, user, on
         <Modal
             title={user ? 'Edit User' : 'Add New User'}
             onClose={onClose}
-            className="max-w-md"
+            className="max-w-lg"
             footer={(
                 <>
                     <Button type="button" onClick={onClose} variant="outline">
@@ -125,14 +125,26 @@ const UserFormModal: React.FC<UserFormModalProps> = ({ isOpen, onClose, user, on
                 </>
             )}
         >
-            <form onSubmit={handleSubmit} className="space-y-4" id="user-form">
+            <form onSubmit={handleSubmit} className="space-y-5" id="user-form">
+                <div className="workspace-notice workspace-notice--muted">
+                    {user
+                        ? 'Update user identity, access level, and account status from one compact workspace form.'
+                        : 'Create a new team member account with the correct role and active status.'}
+                </div>
+
                 {error && (
                     <div className="alert-error">
                         {error}
                     </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
+                    <div className="mb-4 flex items-center gap-3">
+                        <span className="h-px flex-1 bg-slate-200" />
+                        <span className="text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-400">Identity</span>
+                        <span className="h-px flex-1 bg-slate-200" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
                     <div>
                         <FormLabel>First Name</FormLabel>
                         <TextInput
@@ -153,8 +165,15 @@ const UserFormModal: React.FC<UserFormModalProps> = ({ isOpen, onClose, user, on
                             required
                         />
                     </div>
+                    </div>
                 </div>
 
+                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="mb-4 flex items-center gap-3">
+                        <span className="h-px flex-1 bg-slate-200" />
+                        <span className="text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-400">Account</span>
+                        <span className="h-px flex-1 bg-slate-200" />
+                    </div>
                 <div>
                     <FormLabel>Email</FormLabel>
                     <TextInput
@@ -189,7 +208,14 @@ const UserFormModal: React.FC<UserFormModalProps> = ({ isOpen, onClose, user, on
                         />
                     </div>
                 )}
+                </div>
 
+                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="mb-4 flex items-center gap-3">
+                        <span className="h-px flex-1 bg-slate-200" />
+                        <span className="text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-400">Access</span>
+                        <span className="h-px flex-1 bg-slate-200" />
+                    </div>
                 <div className="grid grid-cols-2 gap-4">
                     <div>
                         <FormLabel>Role</FormLabel>
@@ -216,6 +242,7 @@ const UserFormModal: React.FC<UserFormModalProps> = ({ isOpen, onClose, user, on
                             <option value="Inactive">Inactive</option>
                         </SelectInput>
                     </div>
+                </div>
                 </div>
             </form>
         </Modal>

@@ -1,4 +1,4 @@
-﻿import { Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
 import Activity, { IActivity } from '../models/activity.model';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth.middleware';
@@ -8,18 +8,20 @@ import Lead from '../models/lead.model';
 import Company from '../models/company.model';
 import Proposal from '../models/proposal.model';
 import User from '../models/user.model';
+import { writeAuditLog } from '../services/audit.service';
 
-const resolveRelatedModel = async (relatedTo?: { model: string; id: string }) => {
+const resolveRelatedModel = async (tenantId: string, relatedTo?: { model: string; id: string }) => {
     if (!relatedTo?.model || !relatedTo?.id) return;
 
+    const query = { _id: relatedTo.id, tenantId };
     const model = relatedTo.model;
-    if (model === 'Lead') return Lead.findById(relatedTo.id);
-    if (model === 'Company') return Company.findById(relatedTo.id);
-    if (model === 'Proposal') return Proposal.findById(relatedTo.id);
+    if (model === 'Lead') return Lead.findOne(query);
+    if (model === 'Company') return Company.findOne(query);
+    if (model === 'Proposal') return Proposal.findOne(query);
     return null;
 };
 
-const validateAttendees = async (attendees?: string[]) => {
+const validateAttendees = async (tenantId: string, attendees?: string[]) => {
     if (!attendees || attendees.length === 0) return;
 
     for (const attendeeId of attendees) {
@@ -28,9 +30,9 @@ const validateAttendees = async (attendees?: string[]) => {
         }
     }
 
-    const existing = await User.countDocuments({ _id: { $in: attendees } });
+    const existing = await User.countDocuments({ _id: { $in: attendees }, tenantId });
     if (existing !== attendees.length) {
-        throw new AppError('One or more attendees not found', 404);
+        throw new AppError('One or more attendees not found in your organization', 404);
     }
 };
 
@@ -55,12 +57,13 @@ export const getActivities = async (
             sortOrder = 'desc'
         } = req.query;
 
-        // Build filter
+        // Build filter - Critical Tenant Isolation
         type ActivityFilter = FilterQuery<IActivity> & {
             activityDate?: { $gte?: Date; $lte?: Date };
         };
-        const filter: ActivityFilter = {};
+        const filter: ActivityFilter = { tenantId: req.tenantId! };
 
+        // RBAC constraints
         if (req.user!.role !== 'Admin' && req.user!.role !== 'Manager') {
             filter.createdBy = req.user!._id;
         }
@@ -88,7 +91,10 @@ export const getActivities = async (
 
         const activities = await Activity.find(filter)
             .select('title activityType activityDate relatedTo attendees createdBy status createdAt nextFollowUpDate')
-            .populate('relatedTo.id')
+            .populate({
+                path: 'relatedTo.id',
+                match: { tenantId: req.tenantId! }
+            })
             .populate('createdBy', 'firstName lastName email')
             .populate('attendees', 'firstName lastName email')
             .sort(sort)
@@ -127,13 +133,13 @@ export const getActivity = async (
             throw new AppError('Invalid activity identifier', 400);
         }
 
-        const activity = await Activity.findById(req.params.id)
+        const activity = await Activity.findOne({ _id: req.params.id, tenantId: req.tenantId! })
             .populate('relatedTo.id')
             .populate('createdBy', 'firstName lastName email avatar')
             .populate('attendees', 'firstName lastName email');
 
         if (!activity) {
-            throw new AppError('Activity not found', 404);
+            throw new AppError('Activity not found or unauthorized access', 404);
         }
 
         if (
@@ -171,21 +177,22 @@ export const createActivity = async (
             throw new AppError('Invalid related identifier', 400);
         }
 
-        const relatedRecord = await resolveRelatedModel(value.relatedTo);
+        const relatedRecord = await resolveRelatedModel(req.tenantId!, value.relatedTo);
         if (!relatedRecord) {
-            throw new AppError('Related record not found', 404);
+            throw new AppError('Related record not found in your organization', 404);
         }
 
-        await validateAttendees(value.attendees);
+        await validateAttendees(req.tenantId!, value.attendees);
 
         const activity = await Activity.create({
             ...value,
+            tenantId: req.tenantId!,
             createdBy: req.user!._id
         });
 
         if (activity.relatedTo?.model === 'Lead' && activity.relatedTo?.id) {
             const activityDate = activity.activityDate || new Date();
-            const lead = await Lead.findById(activity.relatedTo.id);
+            const lead = await Lead.findOne({ _id: activity.relatedTo.id, tenantId: req.tenantId! });
             if (lead) {
                 if (!lead.firstResponseAt) {
                     lead.firstResponseAt = activityDate;
@@ -194,6 +201,17 @@ export const createActivity = async (
                 await lead.save();
             }
         }
+
+        // 📍 SECURITY: Audit Log Creation
+        await writeAuditLog({
+            tenantId: req.tenantId!,
+            actorId: req.user!._id.toString(),
+            action: 'CREATE',
+            entityType: 'Activity',
+            entityId: activity._id.toString(),
+            ip: req.ip,
+            changes: activity.toObject() as any
+        });
 
         res.status(201).json({
             success: true,
@@ -223,36 +241,53 @@ export const updateActivity = async (
             throw new AppError(error.details[0].message, 400);
         }
 
+        const activity = await Activity.findOne({ _id: req.params.id, tenantId: req.tenantId! });
+        if (!activity) {
+            throw new AppError('Activity not found or unauthorized access', 404);
+        }
+
+        const beforeUpdate = activity.toObject();
+
+        // Check ownership
+        if (activity.createdBy.toString() !== req.user!._id.toString() && req.user!.role !== 'Admin' && req.user!.role !== 'Manager') {
+            throw new AppError('Not authorized to update this activity', 403);
+        }
+
         if (value.relatedTo?.id && !mongoose.isValidObjectId(value.relatedTo.id)) {
             throw new AppError('Invalid related identifier', 400);
         }
 
         if (value.relatedTo?.id) {
-            const relatedRecord = await resolveRelatedModel(value.relatedTo);
+            const relatedRecord = await resolveRelatedModel(req.tenantId!, value.relatedTo);
             if (!relatedRecord) {
-                throw new AppError('Related record not found', 404);
+                throw new AppError('Related record not found in your organization', 404);
             }
         }
 
-        await validateAttendees(value.attendees);
+        await validateAttendees(req.tenantId!, value.attendees);
 
-        const activity = await Activity.findById(req.params.id);
-        if (!activity) {
-            throw new AppError('Activity not found', 404);
-        }
-
-        // Check if user owns this activity
-        if (activity.createdBy.toString() !== req.user!._id.toString() && req.user!.role !== 'Admin') {
-            throw new AppError('Not authorized to update this activity', 403);
-        }
-
-        const updatedActivity = await Activity.findByIdAndUpdate(
-            req.params.id,
+        const updatedActivity = await Activity.findOneAndUpdate(
+            { _id: req.params.id, tenantId: req.tenantId! },
             { $set: value },
             { new: true, runValidators: true }
         )
             .populate('relatedTo.id')
             .populate('createdBy', 'firstName lastName email');
+
+        if (!updatedActivity) {
+            throw new AppError('Update failed: Activity not found', 404);
+        }
+
+        // 📍 SECURITY: Audit Log Update
+        await writeAuditLog({
+            tenantId: req.tenantId!,
+            actorId: req.user!._id.toString(),
+            action: 'UPDATE',
+            entityType: 'Activity',
+            entityId: updatedActivity._id.toString(),
+            ip: req.ip,
+            changes: { before: beforeUpdate as any, after: updatedActivity.toObject() as any }
+        });
 
         res.status(200).json({
             success: true,
@@ -277,15 +312,26 @@ export const deleteActivity = async (
             throw new AppError('Invalid activity identifier', 400);
         }
 
-        const activity = await Activity.findById(req.params.id);
+        const activity = await Activity.findOne({ _id: req.params.id, tenantId: req.tenantId! });
         if (!activity) {
-            throw new AppError('Activity not found', 404);
+            throw new AppError('Activity not found or unauthorized access', 404);
         }
 
-        // Check if user owns this activity
-        if (activity.createdBy.toString() !== req.user!._id.toString() && req.user!.role !== 'Admin') {
+        // Check ownership
+        if (activity.createdBy.toString() !== req.user!._id.toString() && req.user!.role !== 'Admin' && req.user!.role !== 'Manager') {
             throw new AppError('Not authorized to delete this activity', 403);
         }
+
+        // 📍 SECURITY: Audit Log Delete
+        await writeAuditLog({
+            tenantId: req.tenantId!,
+            actorId: req.user!._id.toString(),
+            action: 'DELETE',
+            entityType: 'Activity',
+            entityId: activity._id.toString(),
+            ip: req.ip,
+            changes: activity.toObject() as any
+        });
 
         await activity.deleteOne();
 

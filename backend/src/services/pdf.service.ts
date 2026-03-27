@@ -275,19 +275,29 @@ export class PDFService {
             return '';
         }
 
+        // Detect if section titles already have leading numbers (e.g. "1. About the Project")
+        const hasLeadingNumbers = tocEntries.length > 0 &&
+            tocEntries.filter((e) => e.level === 1).every((e) => /^\d+[\.\)\-]\s/.test(e.title));
+
         return `
             <section class="toc-page">
                 <div class="toc-title">Table of Contents</div>
-                ${tocEntries.map((entry, index) => `
+                ${tocEntries.map((entry, index) => {
+                    // Strip leading number from title if titles already contain numbers
+                    const displayTitle = hasLeadingNumbers
+                        ? entry.title.replace(/^\d+[\.\)\-]\s*/, '')
+                        : entry.title;
+                    return `
                     <div class="toc-item" style="padding-left: ${(entry.level - 1) * 20}px;">
                         <span class="toc-number">${index + 1}.</span>
                         <a class="toc-link" href="#${entry.id}">
-                            <span class="toc-title-text">${entry.title}</span>
+                            <span class="toc-title-text">${displayTitle}</span>
                         </a>
                         <span class="toc-dots"></span>
                         <span class="toc-page-number" data-toc-target="${entry.id}">-</span>
                     </div>
-                `).join('')}
+                `;
+                }).join('')}
             </section>
         `;
     }
@@ -340,6 +350,7 @@ export class PDFService {
                         padding: 60px 40px 80px;
                         background: #ffffff;
                         color: #111827;
+                        min-height: calc(${this.A4_HEIGHT_PX}px - ${this.MARGIN_TOP_PX}px - ${this.MARGIN_BOTTOM_PX}px);
                     }
                     .cover-logo {
                         max-width: 200px;
@@ -393,38 +404,51 @@ export class PDFService {
                     }
                     .toc-item {
                         display: flex;
+                        flex-wrap: nowrap;
                         align-items: baseline;
-                        gap: 8px;
-                        padding: 8px 0;
-                        border-bottom: 1px dotted #d1d5db;
+                        gap: 6px;
+                        padding: 7px 0;
+                        border-bottom: none;
                         font-size: 14px;
+                        line-height: 1.4;
+                        overflow: hidden;
                     }
                     .toc-number {
+                        flex: 0 0 auto;
                         font-weight: 600;
                         color: #111827;
-                        margin-right: 15px;
+                        min-width: 28px;
                     }
                     .toc-title-text {
-                        flex: 0 1 auto;
-                        word-break: break-word;
+                        flex: 0 0 auto;
+                        max-width: 70%;
+                        white-space: nowrap;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
                     }
                     .toc-dots {
                         flex: 1 1 auto;
-                        border-bottom: 1px dotted #d1d5db;
-                        margin: 0 6px;
-                        transform: translateY(-2px);
+                        min-width: 20px;
+                        border-bottom: 1px dotted #9ca3af;
+                        margin: 0 4px;
+                        transform: translateY(-3px);
+                        height: 0;
                     }
                     .toc-page-number {
+                        flex: 0 0 auto;
                         font-weight: 600;
                         color: #666;
-                        min-width: 32px;
+                        min-width: 20px;
                         text-align: right;
+                        white-space: nowrap;
                     }
                     .toc-link {
                         text-decoration: none;
                         color: inherit;
-                        display: flex;
-                        flex: 1;
+                        flex: 0 1 auto;
+                        overflow: hidden;
+                        white-space: nowrap;
+                        text-overflow: ellipsis;
                     }
                     .section {
                         margin-bottom: 16px;
@@ -488,6 +512,35 @@ export class PDFService {
                         page-break-inside: avoid;
                         break-inside: avoid;
                     }
+                    .section-content img {
+                        max-width: 100%;
+                        height: auto;
+                    }
+                    .section-content blockquote {
+                        border-left: 3px solid #d1d5db;
+                        padding-left: 16px;
+                        margin: 12px 0;
+                        color: #4b5563;
+                        font-style: italic;
+                    }
+                    .section-content pre {
+                        background: #f3f4f6;
+                        padding: 12px;
+                        border-radius: 6px;
+                        overflow-x: auto;
+                        font-size: 12px;
+                        margin: 12px 0;
+                    }
+                    .section-content code {
+                        background: #f3f4f6;
+                        padding: 2px 4px;
+                        border-radius: 3px;
+                        font-size: 12px;
+                    }
+                    .section-content pre code {
+                        background: none;
+                        padding: 0;
+                    }
                 </style>
             </head>
             <body>
@@ -517,10 +570,18 @@ export class PDFService {
     private static generateHeaderFooterHTML(proposal: IProposal, logoSrc: string | null): { headerHTML: string; footerHTML: string } {
         const showPageNumbers = true;
         const footerWebsite = this.normalizeWebsite(proposal.footerLine2);
+        // Puppeteer header/footer templates require explicit font-size on the root element,
+        // otherwise all text renders at ~0px and is invisible.
+        // Using "pageNumber == 1" CSS trick to hide header/footer on cover page.
         const headerHTML = `
-            <div style="width: 100%; padding: 10px 60px; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center;">
-                ${logoSrc ? `<img src="${logoSrc}" style="max-height: 30px;">` : `<span style="font-weight: 600; color: #667eea;">${proposal.preparedBy.company}</span>`}
-                ${proposal.headerText ? `<span style="font-size: 12px; color: #666;">${proposal.headerText}</span>` : ''}
+            <div style="width: 100%; padding: 10px 60px; font-size: 12px; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center;">
+                <style>
+                    .header-inner { display: flex; justify-content: space-between; align-items: center; width: 100%; }
+                </style>
+                <div class="header-inner">
+                    ${logoSrc ? `<img src="${logoSrc}" style="max-height: 30px;">` : `<span style="font-weight: 600; color: #667eea;">${proposal.preparedBy.company}</span>`}
+                    ${proposal.headerText ? `<span style="font-size: 12px; color: #666;">${proposal.headerText}</span>` : ''}
+                </div>
             </div>
         `;
 

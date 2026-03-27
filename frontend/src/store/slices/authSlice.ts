@@ -1,10 +1,19 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import axios from '../../api/axios';
+import axios, { type ApiRequestConfig } from '../../api/axios';
 import { getErrorMessage } from '../../utils/error';
-import { getAccessToken, getStoredUser, setTokens, setStoredUser, clearAuthStorage, isTokenExpired } from '../../utils/authStorage';
+import {
+    getAccessToken,
+    getStoredUser,
+    setTokens,
+    setStoredUser,
+    clearAuthStorage,
+    isTokenExpired,
+    getTokenStorageType
+} from '../../utils/authStorage';
 
 interface User {
     id: string;
+    _id: string;
     email: string;
     firstName: string;
     lastName: string;
@@ -24,7 +33,7 @@ interface AuthState {
 }
 
 const initialState: AuthState = {
-    user: getStoredUser(),
+    user: getStoredUser() as User | null,
     token: getAccessToken(),
     refreshToken: null,
     isAuthenticated: !!getAccessToken() && !isTokenExpired(getAccessToken()),
@@ -38,7 +47,8 @@ export const login = createAsyncThunk(
     async (credentials: { email: string; password: string; remember?: boolean }, { rejectWithValue }) => {
         try {
             const { remember = true, ...payload } = credentials;
-            const response = await axios.post('/auth/login', payload);
+            clearAuthStorage();
+            const response = await axios.post('/auth/login', payload, { _skipAuth: true } as ApiRequestConfig);
             const { user, token, refreshToken } = response.data.data;
 
             setStoredUser(user, remember);
@@ -92,7 +102,7 @@ export const updateProfile = createAsyncThunk(
         try {
             const response = await axios.put('/auth/profile', userData);
             const user = response.data.data.user;
-            setStoredUser(user, true);
+            setStoredUser(user, getTokenStorageType() === 'local');
             return user;
         } catch (error: unknown) {
             return rejectWithValue(getErrorMessage(error, 'Update failed'));
@@ -101,9 +111,9 @@ export const updateProfile = createAsyncThunk(
 );
 
 export const logout = createAsyncThunk('auth/logout', async () => {
-    try {
-        await axios.post('/auth/logout');
-    } catch (error) {
+        try {
+            await axios.post('/auth/logout', undefined, { _skipAuth: true } as ApiRequestConfig);
+        } catch (error) {
         // Ignore errors on logout
     } finally {
         clearAuthStorage();
@@ -163,7 +173,7 @@ const authSlice = createSlice({
             .addCase(getMe.fulfilled, (state, action: PayloadAction<User>) => {
                 state.loading = false;
                 state.user = action.payload;
-                localStorage.setItem('user', JSON.stringify(action.payload));
+                setStoredUser(action.payload, getTokenStorageType() === 'local');
             })
             .addCase(getMe.rejected, (state) => {
                 state.loading = false;

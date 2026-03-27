@@ -69,7 +69,7 @@ const seedData = async () => {
                 firstName: 'Admin',
                 lastName: 'User',
                 email: 'admin@example.com',
-                password: 'Admin@123',
+                password: 'Admin@12345',
                 role: 'Admin'
             });
         }

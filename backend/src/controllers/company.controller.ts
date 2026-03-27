@@ -1,9 +1,12 @@
-﻿import { Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
 import Company from '../models/company.model';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { createCompanySchema, updateCompanySchema } from '../validators/company.validator';
 import mongoose from 'mongoose';
+import { getPaginationParams, buildPaginationMeta } from '../utils/pagination';
+import { getSearchTerm, applySearchFilter } from '../utils/queryFilters';
+import { writeAuditLog } from '../services/audit.service';
 
 // @desc    Get all companies
 // @route   GET /api/companies
@@ -15,9 +18,6 @@ export const getCompanies = async (
 ): Promise<void> => {
     try {
         const {
-            page = 1,
-            limit = 10,
-            search,
             industry,
             companySize,
             status,
@@ -25,8 +25,8 @@ export const getCompanies = async (
             sortOrder = 'desc'
         } = req.query;
 
-        // Build filter
-        const filter: Record<string, unknown> = {};
+        // Build filter - Critical Tenant Isolation
+        const filter: Record<string, unknown> = { tenantId: req.tenantId! };
 
         if (req.user!.role !== 'Admin' && req.user!.role !== 'Manager') {
             filter.createdBy = req.user!._id;
@@ -36,18 +36,11 @@ export const getCompanies = async (
         if (industry) filter.industry = industry;
         if (companySize) filter.companySize = companySize;
 
-        // Search
-        if (search) {
-            filter.$or = [
-                { name: { $regex: search, $options: 'i' } },
-                { email: { $regex: search, $options: 'i' } },
-                { phone: { $regex: search, $options: 'i' } },
-                { gst: { $regex: search, $options: 'i' } }
-            ];
-        }
+        const searchTerm = getSearchTerm(req.query as Record<string, unknown>);
+        applySearchFilter(filter, searchTerm, ['name', 'email', 'phone']);
 
         // Pagination
-        const skip = (Number(page) - 1) * Number(limit);
+        const { page, limit, skip } = getPaginationParams(req.query as Record<string, unknown>);
         const sort: Record<string, 1 | -1> = {};
         sort[sortBy as string] = sortOrder === 'asc' ? 1 : -1;
 
@@ -56,20 +49,15 @@ export const getCompanies = async (
             .populate('createdBy', 'firstName lastName email')
             .sort(sort)
             .skip(skip)
-            .limit(Number(limit));
+            .limit(limit);
 
         const total = await Company.countDocuments(filter);
 
         res.status(200).json({
             success: true,
             data: {
-                companies,
-                pagination: {
-                    page: Number(page),
-                    limit: Number(limit),
-                    total,
-                    pages: Math.ceil(total / Number(limit))
-                }
+                items: companies,
+                meta: buildPaginationMeta(page, limit, total)
             }
         });
     } catch (error) {
@@ -90,11 +78,11 @@ export const getCompany = async (
             throw new AppError('Invalid company identifier', 400);
         }
 
-        const company = await Company.findById(req.params.id)
+        const company = await Company.findOne({ _id: req.params.id, tenantId: req.tenantId! })
             .populate('createdBy', 'firstName lastName email');
 
         if (!company) {
-            throw new AppError('Company not found', 404);
+            throw new AppError('Company not found or unauthorized access', 404);
         }
 
         res.status(200).json({
@@ -122,7 +110,19 @@ export const createCompany = async (
 
         const company = await Company.create({
             ...value,
+            tenantId: req.tenantId!,
             createdBy: req.user!._id
+        });
+
+        // 📍 SECURITY: Audit Log Creation
+        await writeAuditLog({
+            tenantId: req.tenantId!,
+            actorId: req.user!._id.toString(),
+            action: 'CREATE',
+            entityType: 'Company',
+            entityId: company._id.toString(),
+            ip: req.ip,
+            changes: company.toObject() as any
         });
 
         res.status(201).json({
@@ -153,10 +153,12 @@ export const updateCompany = async (
             throw new AppError(error.details[0].message, 400);
         }
 
-        const company = await Company.findById(req.params.id);
+        const company = await Company.findOne({ _id: req.params.id, tenantId: req.tenantId! });
         if (!company) {
-            throw new AppError('Company not found', 404);
+            throw new AppError('Company not found or unauthorized access', 404);
         }
+
+        const beforeUpdate = company.toObject();
 
         if (
             req.user!.role !== 'Admin' &&
@@ -166,11 +168,26 @@ export const updateCompany = async (
             throw new AppError('Not authorized to update this company', 403);
         }
 
-        const updatedCompany = await Company.findByIdAndUpdate(
-            req.params.id,
+        const updatedCompany = await Company.findOneAndUpdate(
+            { _id: req.params.id, tenantId: req.tenantId! },
             { $set: value },
             { new: true, runValidators: true }
         ).populate('createdBy', 'firstName lastName email');
+
+        if (!updatedCompany) {
+            throw new AppError('Update failed: Company not found', 404);
+        }
+
+        // 📍 SECURITY: Audit Log Update
+        await writeAuditLog({
+            tenantId: req.tenantId!,
+            actorId: req.user!._id.toString(),
+            action: 'UPDATE',
+            entityType: 'Company',
+            entityId: updatedCompany._id.toString(),
+            ip: req.ip,
+            changes: { before: beforeUpdate as any, after: updatedCompany.toObject() as any }
+        });
 
         res.status(200).json({
             success: true,
@@ -195,9 +212,9 @@ export const deleteCompany = async (
             throw new AppError('Invalid company identifier', 400);
         }
 
-        const company = await Company.findById(req.params.id);
+        const company = await Company.findOne({ _id: req.params.id, tenantId: req.tenantId! });
         if (!company) {
-            throw new AppError('Company not found', 404);
+            throw new AppError('Company not found or unauthorized access', 404);
         }
 
         if (
@@ -208,11 +225,41 @@ export const deleteCompany = async (
             throw new AppError('Not authorized to delete this company', 403);
         }
 
+        // 📍 SECURITY: Audit Log Delete
+        await writeAuditLog({
+            tenantId: req.tenantId!,
+            actorId: req.user!._id.toString(),
+            action: 'DELETE',
+            entityType: 'Company',
+            entityId: company._id.toString(),
+            ip: req.ip,
+            changes: company.toObject() as any
+        });
+
         await company.deleteOne();
 
         res.status(200).json({
             success: true,
             message: 'Company deleted successfully'
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const getCompanyListForInvoice = async (
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        const companies = await Company.find({ tenantId: req.tenantId!, status: 'Active' })
+            .select('name gst address stateCode city phone email')
+            .sort({ name: 1 });
+
+        res.status(200).json({
+            success: true,
+            data: { companies }
         });
     } catch (error) {
         next(error);

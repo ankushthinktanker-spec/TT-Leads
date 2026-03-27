@@ -1,5 +1,4 @@
 import express from 'express';
-import rateLimit from 'express-rate-limit';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
@@ -18,11 +17,14 @@ import {
     generatePDF,
     downloadPDF,
     streamPDF,
+    sendProposal,
     getProposalLogo,
     uploadProposalLogo
 } from '../controllers/proposal.controller';
 import { protect, authorize } from '../middleware/auth.middleware';
 import { checkPermission } from '../middleware/permission.middleware';
+import { isAllowedFile, sanitizeUploadFileName } from '../utils/fileSecurity.utils';
+import { sensitiveLimiter } from '../middleware/rateLimiter';
 
 const router = express.Router();
 
@@ -34,9 +36,10 @@ if (!fs.existsSync(logosDir)) {
 const storage = multer.diskStorage({
     destination: (_req, _file, cb) => cb(null, logosDir),
     filename: (_req, file, cb) => {
-        const ext = path.extname(file.originalname);
-        const baseName = path.basename(file.originalname, ext).replace(/\s+/g, '-');
-        cb(null, `${baseName}-${Date.now()}${ext}`);
+        const safeName = sanitizeUploadFileName(file.originalname);
+        const ext = path.extname(safeName);
+        const baseName = path.basename(safeName, ext);
+        cb(null, `${baseName}-${Date.now()}${ext.toLowerCase()}`);
     }
 });
 
@@ -45,19 +48,13 @@ const upload = multer({
     limits: { fileSize: 2 * 1024 * 1024 },
     fileFilter: (_req, file, cb) => {
         const allowedTypes = ['image/png', 'image/jpeg', 'image/webp'];
-        if (!allowedTypes.includes(file.mimetype)) {
+        const allowedExts = ['.png', '.jpg', '.jpeg', '.webp'];
+        if (!isAllowedFile(file.originalname, file.mimetype, allowedTypes, allowedExts)) {
             cb(new Error('Only PNG, JPG, or WEBP images are allowed'));
             return;
         }
         cb(null, true);
     }
-});
-
-const pdfRateLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 30,
-    standardHeaders: true,
-    legacyHeaders: false
 });
 
 router.use(protect);
@@ -82,10 +79,11 @@ router.put('/:id/sections/:sectionId', checkPermission('proposals', 'edit'), upd
 router.delete('/:id/sections/:sectionId', checkPermission('proposals', 'edit'), deleteSection);
 router.post('/:id/sections/reorder', checkPermission('proposals', 'edit'), reorderSections);
 
-// Versioning & PDF
+// Versioning & PDF - Apply centralized sensitive operations rate limiter
 router.post('/:id/duplicate', checkPermission('proposals', 'create'), duplicateProposal);
-router.post('/:id/generate-pdf', checkPermission('proposals', 'export'), pdfRateLimiter, generatePDF);
-router.get('/:id/download', checkPermission('proposals', 'export'), pdfRateLimiter, downloadPDF);
-router.get('/:id/pdf', checkPermission('proposals', 'export'), pdfRateLimiter, streamPDF);
+router.post('/:id/generate-pdf', checkPermission('proposals', 'export'), sensitiveLimiter, generatePDF);
+router.post('/:id/send', checkPermission('proposals', 'edit'), sensitiveLimiter, sendProposal);
+router.get('/:id/download', checkPermission('proposals', 'export'), sensitiveLimiter, downloadPDF);
+router.get('/:id/pdf', checkPermission('proposals', 'export'), sensitiveLimiter, streamPDF);
 
 export default router;

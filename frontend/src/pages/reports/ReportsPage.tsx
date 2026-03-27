@@ -1,13 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
-import MainLayout from '../../components/layout/MainLayout';
+import { Download, FileBarChart2, Sparkles, AlertCircle } from 'lucide-react';
 import { useAppDispatch, useAppSelector } from '../../hooks/redux';
 import { fetchReport } from '../../store/slices/reportsSlice';
-import PageLayout from '../../components/ui/PageLayout';
-import PageHeader from '../../components/ui/PageHeader';
-import FilterBar from '../../components/ui/FilterBar';
-import SurfaceCard from '../../components/ui/SurfaceCard';
-import EmptyState from '../../components/ui/EmptyState';
-import { Table, TableHead, TableRow, TableHeadCell, TableBody, TableCell } from '../../components/ui/Table';
+import {
+    ModulePageShell,
+    ModulePageHeader,
+    ModuleToolbar,
+    ModuleSummaryCards,
+    ModuleDataTable,
+    ModuleBadge,
+    type ModuleColumnDef,
+    type SummaryCardItem,
+} from '../../components/module-system';
 
 const REPORTS = [
     { label: 'Lead Register Report', endpoint: '/reports/leads/register' },
@@ -93,108 +97,135 @@ const ReportsPage = () => {
         window.open(`/api${selectedReport}?${query.toString()}`, '_blank');
     };
 
-    const columns = rows.length ? Object.keys(rows[0]) : [];
     const selectedReportLabel = REPORTS.find((report) => report.endpoint === selectedReport)?.label || 'Report';
 
+    // Dynamite columns based on report rows
+    const columns: ModuleColumnDef<any>[] = rows.length ? Object.keys(rows[0]).map((colKey) => ({
+        id: colKey,
+        header: colKey.replace(/([A-Z])/g, ' $1').replace(/^./, (str) => str.toUpperCase()), // camelCase to Title Case
+        cell: (row) => (
+            <div className="mod-table__primary-text" style={{ fontSize: 13, fontWeight: 500 }}>
+                {row[colKey] !== null && row[colKey] !== undefined ? String(row[colKey]) : '-'}
+            </div>
+        )
+    })) : [];
+
+    const summaryCards: SummaryCardItem[] = [
+        { label: 'Active Report', value: selectedReportLabel, icon: <Sparkles size={18} />, variant: 'primary' },
+        { label: 'Visible Rows', value: rows.length, icon: <FileBarChart2 size={18} />, variant: 'info' },
+        { label: 'Date Scope', value: dateRange, icon: <AlertCircle size={18} />, variant: 'purple' },
+    ];
+
     return (
-        <MainLayout>
-            <PageLayout>
-                <PageHeader
-                    title="Reports Library"
-                    subtitle="Filter, export, and drill into lead performance reports."
-                    actions={(
-                        <div className="flex items-center gap-3">
-                            <button onClick={() => handleExport('csv')} className="btn btn-secondary text-xs uppercase tracking-widest">Export CSV</button>
-                            <button onClick={() => handleExport('xlsx')} className="btn btn-primary text-xs uppercase tracking-widest">Export Excel</button>
-                        </div>
-                    )}
-                />
+        <ModulePageShell>
+            <ModulePageHeader
+                eyebrow="Intelligence · Data"
+                title="Reports"
+                description="Filter, compare, and export CRM performance data with one consistent reporting surface."
+                actions={
+                    <>
+                        <button onClick={() => handleExport('csv')} className="mod-btn mod-btn--secondary">
+                            <Download size={14} /> Export CSV
+                        </button>
+                        <button onClick={() => handleExport('xlsx')} className="mod-btn mod-btn--primary">
+                            <FileBarChart2 size={14} /> Export Excel
+                        </button>
+                    </>
+                }
+            />
 
-                <FilterBar className="mt-6">
-                    <div className="grid grid-cols-1 lg:grid-cols-6 gap-4">
-                        <select
-                            value={selectedReport}
-                            onChange={(e) => setSelectedReport(e.target.value)}
-                            className="lg:col-span-2 input"
-                        >
-                            {REPORTS.map((report) => (
-                                <option key={report.endpoint} value={report.endpoint}>
-                                    {report.label}
-                                </option>
-                            ))}
-                        </select>
+            <ModuleSummaryCards cards={summaryCards} />
 
-                        <select value={dateRange} onChange={(e) => setDateRange(e.target.value)} className="input">
-                            <option>Today</option>
-                            <option>This Week</option>
-                            <option>This Month</option>
-                            <option>Custom</option>
-                        </select>
-
+            <ModuleToolbar
+                filterContent={
+                    <>
                         {dateRange === 'Custom' && (
                             <>
-                                <input type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} className="input" />
-                                <input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} className="input" />
+                                <div>
+                                    <label className="mod-filter-panel__field-label">Start Date</label>
+                                    <input 
+                                        type="date" 
+                                        className="mod-toolbar__search-input w-full" 
+                                        value={customStart} 
+                                        onChange={(e) => setCustomStart(e.target.value)} 
+                                    />
+                                </div>
+                                <div>
+                                    <label className="mod-filter-panel__field-label">End Date</label>
+                                    <input 
+                                        type="date" 
+                                        className="mod-toolbar__search-input w-full" 
+                                        value={customEnd} 
+                                        onChange={(e) => setCustomEnd(e.target.value)} 
+                                    />
+                                </div>
                             </>
                         )}
-
-                        {canViewTeam && (
-                            <select value={ownerScope} onChange={(e) => setOwnerScope(e.target.value)} className="input">
-                                <option value="me">My Items</option>
-                                <option value="team">Team</option>
-                                <option value="all">All</option>
-                            </select>
-                        )}
-                    </div>
-                </FilterBar>
-
-                <SurfaceCard className="mt-6">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <input className="input" placeholder="Source (optional)" value={source} onChange={(e) => setSource(e.target.value)} />
-                        <input className="input" placeholder="Status/Stage (optional)" value={status} onChange={(e) => setStatus(e.target.value)} />
-                        <input className="input" placeholder="Priority (optional)" value={priority} onChange={(e) => setPriority(e.target.value)} />
-                    </div>
-                </SurfaceCard>
-
-                <SurfaceCard className="mt-6 overflow-hidden">
-                    <div className="px-4 py-3 border-b border-white/5 flex flex-wrap items-center gap-2">
-                        <span className="text-xs uppercase text-secondary-400 tracking-widest">Active Report</span>
-                        <span className="text-sm text-secondary-100 font-semibold">{selectedReportLabel}</span>
-                    </div>
-                    {loading && <p className="text-secondary-400 p-4">Loading report...</p>}
-                    {error && <p className="text-red-400 p-4">{error}</p>}
-                    {!loading && rows.length === 0 && (
-                        <div className="p-4">
-                            <EmptyState title="No data available" description="Try changing filters or date range." />
+                        <div>
+                            <label className="mod-filter-panel__field-label">Source Context</label>
+                            <input 
+                                className="mod-toolbar__search-input w-full" 
+                                placeholder="E.g., Website" 
+                                value={source} 
+                                onChange={(e) => setSource(e.target.value)} 
+                            />
                         </div>
-                    )}
-                    {!loading && rows.length > 0 && (
-                        <div className="overflow-auto">
-                            <Table>
-                                <TableHead>
-                                    <TableRow>
-                                        {columns.map((col) => (
-                                            <TableHeadCell key={col}>{col}</TableHeadCell>
-                                        ))}
-                                    </TableRow>
-                                </TableHead>
-                                <TableBody>
-                                    {rows.map((row, idx) => (
-                                        <TableRow key={idx}>
-                                            {columns.map((col) => (
-                                                <TableCell key={col}>
-                                                    {String(row[col])}
-                                                </TableCell>
-                                            ))}
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
+                        <div>
+                            <label className="mod-filter-panel__field-label">Status Context</label>
+                            <input 
+                                className="mod-toolbar__search-input w-full" 
+                                placeholder="E.g., Hot" 
+                                value={status} 
+                                onChange={(e) => setStatus(e.target.value)} 
+                            />
                         </div>
-                    )}
-                </SurfaceCard>
-            </PageLayout>
-        </MainLayout>
+                    </>
+                }
+            >
+                <select
+                    value={selectedReport}
+                    onChange={(e) => setSelectedReport(e.target.value)}
+                    className="mod-toolbar__select"
+                    style={{ minWidth: 220 }}
+                >
+                    {REPORTS.map((report) => (
+                        <option key={report.endpoint} value={report.endpoint}>
+                            {report.label}
+                        </option>
+                    ))}
+                </select>
+
+                <select value={dateRange} onChange={(e) => setDateRange(e.target.value)} className="mod-toolbar__select">
+                    <option>Today</option>
+                    <option>This Week</option>
+                    <option>This Month</option>
+                    <option>Custom</option>
+                </select>
+
+                {canViewTeam && (
+                    <select value={ownerScope} onChange={(e) => setOwnerScope(e.target.value)} className="mod-toolbar__select">
+                        <option value="me">My Items</option>
+                        <option value="team">Team</option>
+                        <option value="all">All</option>
+                    </select>
+                )}
+            </ModuleToolbar>
+
+            <ModuleDataTable
+                rows={rows}
+                columns={columns}
+                rowKey={(_, idx) => `row-${idx}`}
+                loading={loading}
+                error={error}
+                tableTitle="Report Data"
+                emptyTitle="No data available"
+                emptyDescription="Try changing report type, date range, or operational filters."
+                page={1}
+                totalPages={1}
+                totalItems={rows.length}
+            />
+
+        </ModulePageShell>
     );
 };
 

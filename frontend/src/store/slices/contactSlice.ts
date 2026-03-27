@@ -55,6 +55,8 @@ export const fetchContacts = createAsyncThunk(
         companyId?: string;
         search?: string;
         status?: string;
+        sortBy?: string;
+        sortOrder?: 'asc' | 'desc';
     } = {}) => {
         const response = await api.get('/contacts', { params });
         return response.data;
@@ -106,8 +108,15 @@ const contactSlice = createSlice({
         });
         builder.addCase(fetchContacts.fulfilled, (state, action) => {
             state.loading = false;
-            state.contacts = action.payload.data.contacts;
-            state.pagination = action.payload.data.pagination;
+            const data = action.payload?.data || {};
+            const meta = data.meta || action.payload?.pagination || {};
+            state.contacts = data.items || data.contacts || [];
+            state.pagination = {
+                page: meta?.page ?? 1,
+                limit: meta?.limit ?? 10,
+                total: meta?.totalItems ?? meta?.total ?? 0,
+                pages: meta?.totalPages ?? meta?.pages ?? 0
+            };
         });
         builder.addCase(fetchContacts.rejected, (state, action) => {
             state.loading = false;

@@ -2,9 +2,9 @@ import { useState, useEffect } from 'react';
 import { useAppDispatch, useAppSelector } from '../../hooks/redux';
 import { updateProfile } from '../../store/slices/authSlice';
 import { User, Mail, Phone, Save } from 'lucide-react';
-import SurfaceCard from '../../components/ui/SurfaceCard';
 import Button from '../../components/ui/Button';
 import { FormLabel, TextInput } from '../../components/ui/Form';
+import WorkspaceSection from '../../components/ui/WorkspaceSection';
 import { getErrorMessage } from '../../utils/error';
 
 const ProfileSettings = () => {
@@ -49,26 +49,20 @@ const ProfileSettings = () => {
     };
 
     return (
-        <SurfaceCard className="p-6 w-full">
-            <h2 className="text-xl font-semibold text-secondary-50 mb-6 flex items-center gap-2">
-                <User size={22} className="text-brand-400" />
-                Profile Information
-            </h2>
-
+        <WorkspaceSection
+            title="Profile information"
+            description="Keep your personal identity and contact information current for team collaboration, notifications, and activity attribution."
+            eyebrow="Personal workspace"
+            aside={<><User size={16} className="text-brand-500" /> Account details</>}
+        >
             {message && (
-                <div
-                    className={`rounded-xl border px-4 py-3 text-sm mb-6 ${
-                        message.type === 'success'
-                            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
-                            : 'border-red-500/30 bg-red-500/10 text-red-300'
-                    }`}
-                >
+                <div className={`workspace-notice mb-6 ${message.type === 'success' ? 'workspace-notice--success' : 'workspace-notice--danger'}`}>
                     {message.text}
                 </div>
             )}
 
             <form onSubmit={handleSubmit} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="workspace-form-grid">
                     <div>
                         <FormLabel>First Name</FormLabel>
                         <TextInput
@@ -94,7 +88,7 @@ const ProfileSettings = () => {
                 <div>
                     <FormLabel>Email Address</FormLabel>
                     <div className="relative">
-                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-secondary-500" size={20} />
+                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-900" size={20} />
                         <TextInput
                             type="email"
                             name="email"
@@ -109,7 +103,7 @@ const ProfileSettings = () => {
                 <div>
                     <FormLabel>Phone Number</FormLabel>
                     <div className="relative">
-                        <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-secondary-500" size={20} />
+                        <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-900" size={20} />
                         <TextInput
                             type="tel"
                             name="phone"
@@ -127,8 +121,10 @@ const ProfileSettings = () => {
                     </Button>
                 </div>
             </form>
-        </SurfaceCard>
+        </WorkspaceSection>
     );
 };
 
 export default ProfileSettings;
+
+

@@ -2,9 +2,9 @@ import { useState, useEffect } from 'react';
 import { useAppDispatch, useAppSelector } from '../../hooks/redux';
 import { fetchCompanySettings, updateCompanySettings, CompanySettings as ICompanySettings } from '../../store/slices/settingsSlice';
 import { Building2, Mail, Phone, Globe, MapPin, Save, DollarSign, Percent } from 'lucide-react';
-import SurfaceCard from '../../components/ui/SurfaceCard';
 import Button from '../../components/ui/Button';
 import { FormLabel, TextInput, SelectInput } from '../../components/ui/Form';
+import WorkspaceSection from '../../components/ui/WorkspaceSection';
 import { getErrorMessage } from '../../utils/error';
 
 const CompanySettings = () => {
@@ -72,30 +72,21 @@ const CompanySettings = () => {
     };
 
     return (
-        <SurfaceCard className="p-6 w-full">
-            <h2 className="text-xl font-semibold text-secondary-50 mb-6 flex items-center gap-2">
-                <Building2 size={22} className="text-brand-400" />
-                Company Information
-            </h2>
-
+        <div className="space-y-6">
             {message && (
-                <div
-                    className={`rounded-xl border px-4 py-3 text-sm mb-6 ${
-                        message.type === 'success'
-                            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
-                            : 'border-red-500/30 bg-red-500/10 text-red-300'
-                    }`}
-                >
+                <div className={`workspace-notice ${message.type === 'success' ? 'workspace-notice--success' : 'workspace-notice--danger'}`}>
                     {message.text}
                 </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-8">
-                <SurfaceCard className="p-5 space-y-6">
-                    <div className="text-xs uppercase tracking-widest text-secondary-500">
-                        Identity
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <form onSubmit={handleSubmit} className="space-y-6">
+                <WorkspaceSection
+                    title="Company information"
+                    description="Maintain the core organization profile used across CRM records, proposals, and account ownership views."
+                    eyebrow="Organization profile"
+                    aside={<><Building2 size={16} className="text-brand-500" /> Shared tenant data</>}
+                >
+                    <div className="workspace-form-grid">
                         <div className="md:col-span-2">
                             <FormLabel>Company Name</FormLabel>
                             <TextInput
@@ -110,7 +101,7 @@ const CompanySettings = () => {
                         <div>
                             <FormLabel>Email Address</FormLabel>
                             <div className="relative">
-                                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-secondary-500" size={20} />
+                                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-900" size={20} />
                                 <TextInput
                                     type="email"
                                     name="email"
@@ -125,7 +116,7 @@ const CompanySettings = () => {
                         <div>
                             <FormLabel>Phone Number</FormLabel>
                             <div className="relative">
-                                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-secondary-500" size={20} />
+                                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-900" size={20} />
                                 <TextInput
                                     type="tel"
                                     name="phone"
@@ -139,7 +130,7 @@ const CompanySettings = () => {
                         <div className="md:col-span-2">
                             <FormLabel>Website</FormLabel>
                             <div className="relative">
-                                <Globe className="absolute left-3 top-1/2 -translate-y-1/2 text-secondary-500" size={20} />
+                                <Globe className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-900" size={20} />
                                 <TextInput
                                     type="url"
                                     name="website"
@@ -151,14 +142,15 @@ const CompanySettings = () => {
                             </div>
                         </div>
                     </div>
-                </SurfaceCard>
+                </WorkspaceSection>
 
-                <SurfaceCard className="p-5 space-y-4">
-                    <h3 className="text-lg font-medium text-secondary-50 flex items-center gap-2">
-                        <MapPin size={18} className="text-secondary-500" />
-                        Address Details
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <WorkspaceSection
+                    title="Address details"
+                    description="Use a clean operational address so documents, invoices, and team references stay consistent."
+                    eyebrow="Location"
+                    aside={<><MapPin size={16} className="text-brand-500" /> Office address</>}
+                >
+                    <div className="workspace-form-grid">
                         <div className="md:col-span-2">
                             <FormLabel>Street Address</FormLabel>
                             <TextInput
@@ -205,17 +197,18 @@ const CompanySettings = () => {
                             />
                         </div>
                     </div>
-                </SurfaceCard>
+                </WorkspaceSection>
 
-                <SurfaceCard className="p-5 space-y-4">
-                    <h3 className="text-lg font-medium text-secondary-50 flex items-center gap-2">
-                        <DollarSign size={18} className="text-secondary-500" />
-                        Financial Settings
-                    </h3>
-                    <div className="text-xs text-secondary-500">
+                <WorkspaceSection
+                    title="Financial defaults"
+                    description="These defaults are applied across proposals, commercial documents, and invoice generation flows."
+                    eyebrow="Commercial defaults"
+                    aside={<><DollarSign size={16} className="text-brand-500" /> Revenue settings</>}
+                >
+                    <div className="mb-5 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
                         These defaults are used across proposals and invoices.
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="workspace-form-grid">
                         <div>
                             <FormLabel>Default Currency</FormLabel>
                             <SelectInput
@@ -232,7 +225,7 @@ const CompanySettings = () => {
                         <div>
                             <FormLabel>Default Tax Rate (%)</FormLabel>
                             <div className="relative">
-                                <Percent className="absolute left-3 top-1/2 -translate-y-1/2 text-secondary-500" size={16} />
+                                <Percent className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-900" size={16} />
                                 <TextInput
                                     type="number"
                                     name="taxRate"
@@ -246,7 +239,7 @@ const CompanySettings = () => {
                             </div>
                         </div>
                     </div>
-                </SurfaceCard>
+                </WorkspaceSection>
 
                 <div className="form-actions">
                     <Button type="submit" disabled={loading} variant="primary">
@@ -255,8 +248,10 @@ const CompanySettings = () => {
                     </Button>
                 </div>
             </form>
-        </SurfaceCard>
+        </div>
     );
 };
 
 export default CompanySettings;
+
+

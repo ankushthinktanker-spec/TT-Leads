@@ -1,6 +1,7 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
 export interface IProposal extends Document {
+    tenantId: mongoose.Types.ObjectId;
     // Identification
     proposalNumber: string;
     title: string;
@@ -71,9 +72,14 @@ export interface IProposal extends Document {
 
 const proposalSchema = new Schema<IProposal>(
     {
+        tenantId: {
+            type: Schema.Types.ObjectId,
+            ref: 'Tenant',
+            required: [true, 'Tenant ID is strongly required for proposal isolation']
+        },
         proposalNumber: {
             type: String,
-            unique: true,
+
             required: true
         },
         title: {
@@ -212,7 +218,8 @@ const proposalSchema = new Schema<IProposal>(
 proposalSchema.pre('validate', async function (next) {
     if (this.isNew && !this.proposalNumber) {
         const year = new Date().getFullYear();
-        const count = await mongoose.model('Proposal').countDocuments();
+        // Securely count proposals strictly within the current tenant isolation
+        const count = await mongoose.model('Proposal').countDocuments({ tenantId: this.tenantId });
         this.proposalNumber = `PROP-${year}-${String(count + 1).padStart(4, '0')}`;
     }
     next();
@@ -221,8 +228,8 @@ proposalSchema.pre('validate', async function (next) {
 proposalSchema.pre('save', async function (next) {
     if (this.isNew) {
         const year = new Date().getFullYear();
-        const count = await mongoose.model('Proposal').countDocuments();
         if (!this.proposalNumber) {
+            const count = await mongoose.model('Proposal').countDocuments({ tenantId: this.tenantId });
             this.proposalNumber = `PROP-${year}-${String(count + 1).padStart(4, '0')}`;
         }
     }
@@ -230,7 +237,9 @@ proposalSchema.pre('save', async function (next) {
 });
 
 // Indexes
-proposalSchema.index({ companyId: 1, status: 1 });
+// Indexes for Multi-Tenancy mapping
+proposalSchema.index({ tenantId: 1, proposalNumber: 1 }, { unique: true });
+proposalSchema.index({ tenantId: 1, companyId: 1, status: 1 });
 proposalSchema.index({ leadId: 1 });
 proposalSchema.index({ status: 1, proposalDate: -1 });
 proposalSchema.index({ createdBy: 1, createdAt: -1 });

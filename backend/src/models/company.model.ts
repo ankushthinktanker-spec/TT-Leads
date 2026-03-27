@@ -1,6 +1,8 @@
 import mongoose, { Document, Schema } from 'mongoose';
+import { decryptValue, encryptValue } from '../utils/dataProtection.utils';
 
-interface ICompany extends Document {
+export interface ICompany extends Document {
+    tenantId: mongoose.Types.ObjectId;
     // Basic Information
     name: string;
     website?: string;
@@ -22,6 +24,9 @@ interface ICompany extends Document {
     gst?: string;
     pan?: string;
     registrationNumber?: string;
+    gstEncrypted?: string;
+    panEncrypted?: string;
+    registrationNumberEncrypted?: string;
 
     // Metadata
     tags: string[];
@@ -36,6 +41,11 @@ interface ICompany extends Document {
 
 const companySchema = new Schema<ICompany>(
     {
+        tenantId: {
+            type: Schema.Types.ObjectId,
+            ref: 'Tenant',
+            required: [true, 'Tenant ID is strongly required for company isolation']
+        },
         name: {
             type: String,
             required: [true, 'Company name is required'],
@@ -78,17 +88,15 @@ const companySchema = new Schema<ICompany>(
         },
 
         // Business Information
-        gst: {
+        gstEncrypted: {
             type: String,
-            trim: true,
-            uppercase: true
+            trim: true
         },
-        pan: {
+        panEncrypted: {
             type: String,
-            trim: true,
-            uppercase: true
+            trim: true
         },
-        registrationNumber: {
+        registrationNumberEncrypted: {
             type: String,
             trim: true
         },
@@ -116,18 +124,88 @@ const companySchema = new Schema<ICompany>(
         }
     },
     {
-        timestamps: true
+        timestamps: true,
+        toJSON: {
+            virtuals: true,
+            transform: (_doc, ret) => {
+                delete ret.gstEncrypted;
+                delete ret.panEncrypted;
+                delete ret.registrationNumberEncrypted;
+                return ret;
+            }
+        },
+        toObject: {
+            virtuals: true
+        }
     }
 );
 
-// Indexes
-companySchema.index({ email: 1 });
-companySchema.index({ phone: 1 });
-companySchema.index({ gst: 1 });
-companySchema.index({ createdAt: -1 });
-companySchema.index({ status: 1 });
-companySchema.index({ createdBy: 1 });
-companySchema.index({ tags: 1 });
+companySchema.virtual('gst')
+    .get(function (this: ICompany) {
+        try {
+            if (this.gstEncrypted) return decryptValue(this.gstEncrypted)?.toUpperCase();
+            return undefined;
+        } catch {
+            return undefined;
+        }
+    })
+    .set(function (this: ICompany, value: string) {
+        const normalized = value?.trim()?.toUpperCase();
+        this.gstEncrypted = encryptValue(normalized);
+    });
+
+companySchema.virtual('pan')
+    .get(function (this: ICompany) {
+        try {
+            if (this.panEncrypted) return decryptValue(this.panEncrypted)?.toUpperCase();
+            return undefined;
+        } catch {
+            return undefined;
+        }
+    })
+    .set(function (this: ICompany, value: string) {
+        const normalized = value?.trim()?.toUpperCase();
+        this.panEncrypted = encryptValue(normalized);
+    });
+
+companySchema.virtual('registrationNumber')
+    .get(function (this: ICompany) {
+        try {
+            if (this.registrationNumberEncrypted) return decryptValue(this.registrationNumberEncrypted);
+            return undefined;
+        } catch {
+            return undefined;
+        }
+    })
+    .set(function (this: ICompany, value: string) {
+        const normalized = value?.trim();
+        this.registrationNumberEncrypted = encryptValue(normalized);
+    });
+
+companySchema.pre('save', function (next) {
+    const doc = this as unknown as mongoose.Document;
+    const legacyGstRaw = doc.get('gst');
+    const legacyPanRaw = doc.get('pan');
+    const legacyRegRaw = doc.get('registrationNumber');
+    const legacyGst = typeof legacyGstRaw === 'string' ? legacyGstRaw : '';
+    const legacyPan = typeof legacyPanRaw === 'string' ? legacyPanRaw : '';
+    const legacyReg = typeof legacyRegRaw === 'string' ? legacyRegRaw : '';
+
+    if (!this.gstEncrypted && legacyGst) this.gstEncrypted = encryptValue(legacyGst.trim().toUpperCase());
+    if (!this.panEncrypted && legacyPan) this.panEncrypted = encryptValue(legacyPan.trim().toUpperCase());
+    if (!this.registrationNumberEncrypted && legacyReg) this.registrationNumberEncrypted = encryptValue(legacyReg.trim());
+    next();
+});
+
+// Indexes for Multi-Tenancy mapping
+companySchema.index({ tenantId: 1, name: 1 });
+companySchema.index({ tenantId: 1, email: 1 });
+companySchema.index({ tenantId: 1, phone: 1 });
+companySchema.index({ tenantId: 1, gstEncrypted: 1 });
+companySchema.index({ tenantId: 1, createdAt: -1 });
+companySchema.index({ tenantId: 1, status: 1 });
+companySchema.index({ tenantId: 1, createdBy: 1 });
+companySchema.index({ tenantId: 1, tags: 1 });
 
 const Company = mongoose.model<ICompany>('Company', companySchema);
 

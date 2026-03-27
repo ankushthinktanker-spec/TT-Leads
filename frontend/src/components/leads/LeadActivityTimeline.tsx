@@ -26,13 +26,13 @@ interface LeadActivity {
 const getTypeBadge = (type: LeadActivity['type']) => {
     switch (type) {
         case 'STAGE_CHANGE':
-            return 'bg-blue-500/10 text-blue-300 border-blue-500/30';
+            return 'bg-brand-500/10 text-brand-600 border-brand-500/30';
         case 'FOLLOWUP_SCHEDULED':
             return 'bg-amber-500/10 text-amber-300 border-amber-500/30';
         case 'FOLLOWUP_COMPLETED':
             return 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30';
         default:
-            return 'bg-secondary-800/80 text-secondary-300 border-white/5';
+            return 'bg-slate-100 text-slate-700 border-slate-200';
     }
 };
 
@@ -102,22 +102,22 @@ const LeadActivityTimeline = ({ leadId }: { leadId: string }) => {
 
             <div className="space-y-3">
                 {activities.map((activity) => (
-                    <div key={activity._id} className="rounded-xl border border-white/5 bg-secondary-900/60 p-4">
+                    <div key={activity._id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                         <div className="flex items-center justify-between gap-4">
                             <div>
                                 <div className="flex items-center gap-2 text-sm">
                                     <span className={`px-2 py-0.5 rounded-full border text-xs font-semibold ${getTypeBadge(activity.type)}`}>
                                         {activity.type.replace('_', ' ')}
                                     </span>
-                                    <span className="text-secondary-400 text-xs">
+                                    <span className="text-slate-500 text-xs">
                                         {new Date(activity.createdAt).toLocaleString()}
                                     </span>
                                 </div>
-                                <div className="mt-2 text-secondary-200 text-sm">
+                                <div className="mt-2 text-slate-700 text-sm">
                                     {activity.message}
                                 </div>
                                 {activity.meta && (
-                                    <div className="mt-2 text-xs text-secondary-400 space-y-1">
+                                    <div className="mt-2 text-xs text-slate-500 space-y-1">
                                         {activity.meta?.oldStage && activity.meta?.newStage && (
                                             <div>Stage: {activity.meta.oldStage} {'->'} {activity.meta.newStage}</div>
                                         )}
@@ -132,7 +132,7 @@ const LeadActivityTimeline = ({ leadId }: { leadId: string }) => {
                                         )}
                                     </div>
                                 )}
-                                <div className="mt-2 text-xs text-secondary-500">
+                                <div className="mt-2 text-xs text-slate-500">
                                     By{' '}
                                     {activity.createdBy
                                         ? `${activity.createdBy.firstName || ''} ${activity.createdBy.lastName || ''}`.trim()
@@ -144,11 +144,11 @@ const LeadActivityTimeline = ({ leadId }: { leadId: string }) => {
                 ))}
 
                 {loading && activities.length === 0 && (
-                    <div className="text-sm text-secondary-400">Loading activity...</div>
+                    <div className="text-sm text-slate-500">Loading activity...</div>
                 )}
 
                 {activities.length === 0 && !loading && (
-                    <div className="text-sm text-secondary-500">No activity yet.</div>
+                    <div className="text-sm text-slate-500">No activity yet.</div>
                 )}
             </div>
 
@@ -164,3 +164,5 @@ const LeadActivityTimeline = ({ leadId }: { leadId: string }) => {
 };
 
 export default LeadActivityTimeline;
+
+

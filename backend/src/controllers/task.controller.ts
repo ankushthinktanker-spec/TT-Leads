@@ -1,23 +1,27 @@
-﻿import { Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
 import Task, { ITask } from '../models/task.model';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { createTaskSchema, updateTaskSchema } from '../validators/task.validator';
 import mongoose, { FilterQuery } from 'mongoose';
+import { taskRepository } from '../repositories/task.repository';
+import { taskService } from '../services/task.service';
 import User from '../models/user.model';
 import Lead from '../models/lead.model';
 import Company from '../models/company.model';
 import Proposal from '../models/proposal.model';
 import Activity from '../models/activity.model';
+import { writeAuditLog } from '../services/audit.service';
 
-const resolveRelatedModel = async (relatedTo?: { model: string; id: string }) => {
+const resolveRelatedModel = async (tenantId: string, relatedTo?: { model: string; id: string }) => {
     if (!relatedTo?.model || !relatedTo?.id) return;
 
+    const query = { _id: relatedTo.id, tenantId };
     const model = relatedTo.model;
-    if (model === 'Lead') return Lead.findById(relatedTo.id);
-    if (model === 'Company') return Company.findById(relatedTo.id);
-    if (model === 'Proposal') return Proposal.findById(relatedTo.id);
-    if (model === 'Activity') return Activity.findById(relatedTo.id);
+    if (model === 'Lead') return Lead.findOne(query);
+    if (model === 'Company') return Company.findOne(query);
+    if (model === 'Proposal') return Proposal.findOne(query);
+    if (model === 'Activity') return Activity.findOne(query);
     return null;
 };
 
@@ -43,14 +47,14 @@ export const getTasks = async (
             sortOrder = 'asc'
         } = req.query;
 
-        // Build filter
+        // Build filter - Critical Tenant Isolation
         type TaskFilter = FilterQuery<ITask> & {
             dueDate?: { $gte?: Date; $lte?: Date };
         };
-        const filter: TaskFilter = {};
+        const filter: TaskFilter = { tenantId: req.tenantId! };
 
-        // If not admin, show only assigned tasks
-        if (req.user!.role !== 'Admin') {
+        // RBAC constraints
+        if (req.user!.role !== 'Admin' && req.user!.role !== 'Manager') {
             filter.assignedTo = req.user!._id;
         } else if (assignedTo) {
             filter.assignedTo = assignedTo;
@@ -72,16 +76,19 @@ export const getTasks = async (
         const sort: Record<string, 1 | -1> = {};
         sort[sortBy as string] = sortOrder === 'asc' ? 1 : -1;
 
-        const tasks = await Task.find(filter)
-            .select('title status priority taskType assignedTo createdBy relatedTo dueDate completedAt createdAt')
-            .populate('relatedTo.id')
-            .populate('assignedTo', 'firstName lastName email')
-            .populate('createdBy', 'firstName lastName email')
-            .sort(sort)
-            .skip(skip)
-            .limit(Number(limit));
+        const tasks = await taskRepository.find(req.tenantId!, filter, {
+            select: 'title status priority taskType assignedTo createdBy relatedTo dueDate completedAt createdAt',
+            populate: [
+                { path: 'relatedTo.id' },
+                { path: 'assignedTo', select: 'firstName lastName email' },
+                { path: 'createdBy', select: 'firstName lastName email' }
+            ],
+            sort,
+            skip,
+            limit: Number(limit)
+        });
 
-        const total = await Task.countDocuments(filter);
+        const total = await taskRepository.count(req.tenantId!, filter);
 
         res.status(200).json({
             success: true,
@@ -109,27 +116,7 @@ export const getTask = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        if (!mongoose.isValidObjectId(req.params.id)) {
-            throw new AppError('Invalid task identifier', 400);
-        }
-
-        const task = await Task.findById(req.params.id)
-            .populate('relatedTo.id')
-            .populate('assignedTo', 'firstName lastName email')
-            .populate('createdBy', 'firstName lastName email');
-
-        if (!task) {
-            throw new AppError('Task not found', 404);
-        }
-
-        // Check access
-        if (
-            req.user!.role !== 'Admin' &&
-            task.assignedTo.toString() !== req.user!._id.toString() &&
-            task.createdBy.toString() !== req.user!._id.toString()
-        ) {
-            throw new AppError('Not authorized to view this task', 403);
-        }
+        const task = await taskService.getTaskById(req.tenantId!, req.params.id);
 
         res.status(200).json({
             success: true,
@@ -161,36 +148,22 @@ export const createTask = async (
                 : undefined
         );
 
-        if (!mongoose.isValidObjectId(assignedTo)) {
-            throw new AppError('Invalid assigned user identifier', 400);
-        }
-
-        const assignedUser = await User.findById(assignedTo);
-        if (!assignedUser) {
-            throw new AppError('Assigned user not found', 404);
-        }
-
-        if (relatedTo?.id && !mongoose.isValidObjectId(relatedTo.id)) {
-            throw new AppError('Invalid related identifier', 400);
-        }
-
-        if (relatedTo?.id) {
-            const relatedRecord = await resolveRelatedModel(relatedTo);
-            if (!relatedRecord) {
-                throw new AppError('Related record not found', 404);
-            }
-        }
-
-        const payload: Record<string, unknown> = {
+        const task = await taskService.createTask(req.tenantId!, {
             ...value,
             assignedTo,
-            relatedTo,
-            createdBy: req.user!._id
-        };
-        delete payload.relatedType;
-        delete payload.relatedId;
+            relatedTo
+        }, req.user!._id.toString());
 
-        const task = await Task.create(payload);
+        // 📍 SECURITY: Audit Log Creation
+        await writeAuditLog({
+            tenantId: req.tenantId!,
+            actorId: req.user!._id.toString(),
+            action: 'CREATE',
+            entityType: 'Task',
+            entityId: task._id.toString(),
+            ip: req.ip,
+            changes: task.toObject() as any
+        });
 
         res.status(201).json({
             success: true,
@@ -220,15 +193,17 @@ export const updateTask = async (
             throw new AppError(error.details[0].message, 400);
         }
 
-        const task = await Task.findById(req.params.id);
+        const task = await Task.findOne({ _id: req.params.id, tenantId: req.tenantId! });
         if (!task) {
-            throw new AppError('Task not found', 404);
+            throw new AppError('Task not found in your organization', 404);
         }
+
+        const beforeUpdate = task.toObject();
 
         // Check access
         if (
-            req.user!.role !== 'Admin' &&
-            task.assignedTo.toString() !== req.user!._id.toString() &&
+            req.user!.role !== 'Admin' && req.user!.role !== 'Manager' &&
+            task.assignedTo?.toString() !== req.user!._id.toString() &&
             task.createdBy.toString() !== req.user!._id.toString()
         ) {
             throw new AppError('Not authorized to update this task', 403);
@@ -246,9 +221,9 @@ export const updateTask = async (
         }
 
         if (assignedTo) {
-            const assignedUser = await User.findById(assignedTo);
+            const assignedUser = await User.findOne({ _id: assignedTo, tenantId: req.tenantId! });
             if (!assignedUser) {
-                throw new AppError('Assigned user not found', 404);
+                throw new AppError('Assigned user not found in your organization', 404);
             }
         }
 
@@ -257,9 +232,9 @@ export const updateTask = async (
         }
 
         if (relatedTo?.id) {
-            const relatedRecord = await resolveRelatedModel(relatedTo);
+            const relatedRecord = await resolveRelatedModel(req.tenantId!, relatedTo);
             if (!relatedRecord) {
-                throw new AppError('Related record not found', 404);
+                throw new AppError('Related record not found in your organization', 404);
             }
         }
 
@@ -271,17 +246,32 @@ export const updateTask = async (
         delete update.relatedType;
         delete update.relatedId;
 
-        if (value.status === 'Completed' && !value.completedAt) {
+        if (value.status === 'Completed' && !task.completedAt) {
             update.completedAt = new Date();
         }
 
-        const updatedTask = await Task.findByIdAndUpdate(
-            req.params.id,
+        const updatedTask = await Task.findOneAndUpdate(
+            { _id: req.params.id, tenantId: req.tenantId! },
             { $set: update },
             { new: true, runValidators: true }
         )
             .populate('assignedTo', 'firstName lastName email')
             .populate('createdBy', 'firstName lastName email');
+
+        if (!updatedTask) {
+            throw new AppError('Update failed: Task not found', 404);
+        }
+
+        // 📍 SECURITY: Audit Log Update
+        await writeAuditLog({
+            tenantId: req.tenantId!,
+            actorId: req.user!._id.toString(),
+            action: 'UPDATE',
+            entityType: 'Task',
+            entityId: updatedTask._id.toString(),
+            ip: req.ip,
+            changes: { before: beforeUpdate as any, after: updatedTask.toObject() as any }
+        });
 
         res.status(200).json({
             success: true,
@@ -302,22 +292,22 @@ export const completeTask = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        if (!mongoose.isValidObjectId(req.params.id)) {
-            throw new AppError('Invalid task identifier', 400);
-        }
+        const task = await taskService.completeTask(
+            req.tenantId!,
+            req.params.id,
+            req.user!._id.toString()
+        );
 
-        const task = await Task.findById(req.params.id);
-        if (!task) {
-            throw new AppError('Task not found', 404);
-        }
-
-        // Check if assigned to user
-        if (task.assignedTo.toString() !== req.user!._id.toString() && req.user!.role !== 'Admin') {
-            throw new AppError('Not authorized to complete this task', 403);
-        }
-
-        task.status = 'Completed';
-        await task.save();
+        // 📍 SECURITY: Audit Log Status Update
+        await writeAuditLog({
+            tenantId: req.tenantId!,
+            actorId: req.user!._id.toString(),
+            action: 'STATUS_UPDATE',
+            entityType: 'Task',
+            entityId: (task as any)._id?.toString() || req.params.id,
+            ip: req.ip,
+            changes: { status: 'Completed' }
+        });
 
         res.status(200).json({
             success: true,
@@ -338,21 +328,28 @@ export const deleteTask = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        if (!mongoose.isValidObjectId(req.params.id)) {
-            throw new AppError('Invalid task identifier', 400);
-        }
+        const task = await taskService.getTaskById(req.tenantId!, req.params.id);
 
-        const task = await Task.findById(req.params.id);
-        if (!task) {
-            throw new AppError('Task not found', 404);
-        }
-
-        // Only creator or admin can delete
-        if (task.createdBy.toString() !== req.user!._id.toString() && req.user!.role !== 'Admin') {
+        // Access check: Only creator, manager or admin can delete
+        if (
+            task.createdBy.toString() !== req.user!._id.toString() &&
+            req.user!.role !== 'Admin' && req.user!.role !== 'Manager'
+        ) {
             throw new AppError('Not authorized to delete this task', 403);
         }
 
-        await task.deleteOne();
+        // 📍 SECURITY: Audit Log Delete
+        await writeAuditLog({
+            tenantId: req.tenantId!,
+            actorId: req.user!._id.toString(),
+            action: 'DELETE',
+            entityType: 'Task',
+            entityId: req.params.id,
+            ip: req.ip,
+            changes: (task as any).toObject ? (task as any).toObject() : task
+        });
+
+        await taskRepository.deleteById(req.tenantId!, req.params.id);
 
         res.status(200).json({
             success: true,

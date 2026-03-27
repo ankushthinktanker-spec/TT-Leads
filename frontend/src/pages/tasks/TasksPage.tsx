@@ -1,14 +1,33 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAppDispatch, useAppSelector } from '../../hooks/redux';
 import { fetchTasks, deleteTask, completeTask } from '../../store/slices/taskSlice';
-import MainLayout from '../../components/layout/MainLayout';
 import TaskFormModal from '../../components/tasks/TaskFormModal';
-import { Plus, CheckCircle, Circle, Edit, Trash2, Calendar, AlertCircle } from 'lucide-react';
-import PageLayout from '../../components/ui/PageLayout';
-import PageHeader from '../../components/ui/PageHeader';
-import FilterBar from '../../components/ui/FilterBar';
-import SurfaceCard from '../../components/ui/SurfaceCard';
-import EmptyState from '../../components/ui/EmptyState';
+import {
+    CheckCircle,
+    Circle,
+    Edit,
+    Trash2,
+    Calendar,
+    AlertCircle,
+    TimerReset,
+    ListTodo,
+    Plus,
+    Inbox
+} from 'lucide-react';
+import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import { showToast } from '../../utils/toast';
+import {
+    ModulePageShell,
+    ModulePageHeader,
+    ModuleToolbar,
+    ModuleSummaryCards,
+    ModuleDataTable,
+    ModuleBadge,
+    ModuleRowActions,
+    type ModuleColumnDef,
+    type ActiveFilter,
+    type SummaryCardItem,
+} from '../../components/module-system';
 
 interface TaskRecord {
     _id: string;
@@ -21,13 +40,14 @@ interface TaskRecord {
 
 const TasksPage = () => {
     const dispatch = useAppDispatch();
-    const { tasks, loading, pagination } = useAppSelector((state) => state.tasks);
+    const { tasks, loading, pagination, error } = useAppSelector((state) => state.tasks);
 
     const [showModal, setShowModal] = useState(false);
     const [editingTask, setEditingTask] = useState<TaskRecord | null>(null);
     const [statusFilter, setStatusFilter] = useState('');
     const [priorityFilter, setPriorityFilter] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
+    const [deleteId, setDeleteId] = useState<string | null>(null);
 
     useEffect(() => {
         dispatch(fetchTasks({
@@ -38,16 +58,30 @@ const TasksPage = () => {
         }));
     }, [dispatch, currentPage, statusFilter, priorityFilter]);
 
-    const handleDelete = async (id: string) => {
-        if (window.confirm('Are you sure you want to delete this task?')) {
-            await dispatch(deleteTask(id));
-            dispatch(fetchTasks({ page: currentPage }));
-        }
+    const activeFilters: ActiveFilter[] = [
+        ...(statusFilter ? [{ key: 'status', label: `Status: ${statusFilter}`, onRemove: () => setStatusFilter('') }] : []),
+        ...(priorityFilter ? [{ key: 'priority', label: `Priority: ${priorityFilter}`, onRemove: () => setPriorityFilter('') }] : []),
+    ];
+
+    const clearFilters = () => {
+        setStatusFilter('');
+        setPriorityFilter('');
+        setCurrentPage(1);
     };
 
-    const handleComplete = async (id: string) => {
+    const confirmDelete = async () => {
+        if (!deleteId) return;
+        await dispatch(deleteTask(deleteId));
+        setDeleteId(null);
+        dispatch(fetchTasks({ page: currentPage, status: statusFilter, priority: priorityFilter, limit: 20 }));
+        showToast('Task deleted successfully.', 'success');
+    };
+
+    const handleComplete = async (id: string, currentStatus: string) => {
+        if (currentStatus === 'Completed') return;
         await dispatch(completeTask(id));
-        dispatch(fetchTasks({ page: currentPage }));
+        dispatch(fetchTasks({ page: currentPage, status: statusFilter, priority: priorityFilter, limit: 20 }));
+        showToast('Task marked as completed.', 'success');
     };
 
     const handleEdit = (task: TaskRecord) => {
@@ -58,40 +92,7 @@ const TasksPage = () => {
     const handleCloseModal = () => {
         setShowModal(false);
         setEditingTask(null);
-        dispatch(fetchTasks({ page: currentPage }));
-    };
-
-    const activeFilters = useMemo(() => {
-        const filters: string[] = [];
-        if (statusFilter) filters.push(`Status: ${statusFilter}`);
-        if (priorityFilter) filters.push(`Priority: ${priorityFilter}`);
-        return filters;
-    }, [statusFilter, priorityFilter]);
-
-    const hasActiveFilters = activeFilters.length > 0;
-
-    const handleClearFilters = () => {
-        setStatusFilter('');
-        setPriorityFilter('');
-    };
-
-    const getPriorityColor = (priority: string) => {
-        switch (priority) {
-            case 'High': return 'status-danger';
-            case 'Medium': return 'status-warning';
-            case 'Low': return 'status-success';
-            default: return 'status-neutral';
-        }
-    };
-
-    const getStatusColor = (status: string) => {
-        switch (status) {
-            case 'Completed': return 'status-success';
-            case 'In Progress': return 'bg-brand-500/15 text-brand-300';
-            case 'Pending': return 'status-neutral';
-            case 'Cancelled': return 'status-danger';
-            default: return 'status-neutral';
-        }
+        dispatch(fetchTasks({ page: currentPage, status: statusFilter, priority: priorityFilter, limit: 20 }));
     };
 
     const isOverdue = (dueDate: string, status: string) => {
@@ -99,216 +100,247 @@ const TasksPage = () => {
         return new Date(dueDate) < new Date();
     };
 
-    return (
-        <MainLayout>
-            <PageLayout>
-                <PageHeader
-                    title="Tasks & Reminders"
-                    subtitle="Manage your tasks and follow-ups"
-                    actions={(
-                        <button
-                            onClick={() => setShowModal(true)}
-                            className="btn btn-primary"
-                        >
-                            <Plus size={20} />
-                            New Task
-                        </button>
+    const completedTasks = tasks.filter((task) => task.status === 'Completed').length;
+    const overdueTasks = tasks.filter((task) => isOverdue(task.dueDate, task.status)).length;
+    const inProgressTasks = tasks.filter((task) => task.status === 'In Progress').length;
+
+    const summaryCards: SummaryCardItem[] = [
+        { label: 'In Progress', value: inProgressTasks, icon: <ListTodo size={18} />, variant: 'info' },
+        { label: 'Overdue', value: overdueTasks, icon: <TimerReset size={18} />, variant: 'danger' },
+        { label: 'Completed', value: completedTasks, icon: <CheckCircle size={18} />, variant: 'success' },
+    ];
+
+    const columns: ModuleColumnDef<TaskRecord>[] = [
+        {
+            id: 'statusIcon',
+            header: '',
+            width: '48px',
+            align: 'center',
+            cell: (task) => (
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        handleComplete(task._id, task.status);
+                    }}
+                    disabled={task.status === 'Completed'}
+                    style={{ background: 'none', border: 'none', cursor: task.status === 'Completed' ? 'default' : 'pointer', padding: 0 }}
+                >
+                    {task.status === 'Completed' ? (
+                        <CheckCircle size={20} style={{ color: 'var(--mod-success)' }} />
+                    ) : (
+                        <Circle size={20} style={{ color: 'var(--mod-border)' }} className="hover:text-blue-500 transition-colors" />
                     )}
-                />
-
-                <FilterBar className="mt-6">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <select
-                            value={statusFilter}
-                            onChange={(e) => setStatusFilter(e.target.value)}
-                            className="input"
-                        >
-                            <option value="">All Status</option>
-                            <option value="Pending">Pending</option>
-                            <option value="In Progress">In Progress</option>
-                            <option value="Completed">Completed</option>
-                            <option value="Cancelled">Cancelled</option>
-                        </select>
-
-                        <select
-                            value={priorityFilter}
-                            onChange={(e) => setPriorityFilter(e.target.value)}
-                            className="input"
-                        >
-                            <option value="">All Priorities</option>
-                            <option value="High">High Priority</option>
-                            <option value="Medium">Medium Priority</option>
-                            <option value="Low">Low Priority</option>
-                        </select>
-
-                        <div className="text-sm text-secondary-400 flex items-center justify-end">
-                            Total: {pagination.total} tasks
-                        </div>
+                </button>
+            )
+        },
+        {
+            id: 'task',
+            header: 'Task Details',
+            width: '40%',
+            cell: (task) => (
+                <div style={{ minWidth: 0, opacity: task.status === 'Completed' ? 0.6 : 1 }}>
+                    <div className="mod-table__primary-text" style={{ textDecoration: task.status === 'Completed' ? 'line-through' : 'none' }}>
+                        {task.title}
                     </div>
-                </FilterBar>
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                    {activeFilters.map((filter) => (
-                        <span key={filter} className="filter-chip">
-                            {filter}
-                        </span>
-                    ))}
-                    {hasActiveFilters && (
-                        <button
-                            type="button"
-                            onClick={handleClearFilters}
-                            className="ml-auto text-xs text-primary-400 font-semibold uppercase tracking-widest hover:text-primary-300"
-                        >
-                            Clear filters
-                        </button>
+                    {task.description && (
+                         <div className="mod-table__secondary-text truncate mt-0.5">
+                             {task.description}
+                         </div>
                     )}
                 </div>
-
-                <SurfaceCard className="mt-6 overflow-hidden">
-                    {loading ? (
-                        <div className="flex justify-center items-center h-64">
-                            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-brand-500"></div>
+            )
+        },
+        {
+            id: 'dueDate',
+            header: 'Due Date',
+            width: '15%',
+            cell: (task) => {
+                const overdue = isOverdue(task.dueDate, task.status);
+                return (
+                    <div>
+                        <div className="mod-table__primary-text flex items-center gap-1.5" style={{ fontSize: 13, color: overdue ? 'var(--mod-danger)' : 'var(--mod-text-secondary)' }}>
+                            <Calendar size={13} />
+                            {new Date(task.dueDate).toLocaleDateString()}
                         </div>
-                    ) : tasks.length === 0 ? (
-                        <EmptyState
-                            icon={<CheckCircle size={48} />}
-                            title="No tasks found"
-                            description="Create your first task to get started."
-                            action={(
-                                <button
-                                    onClick={() => setShowModal(true)}
-                                    className="btn btn-outline"
-                                >
-                                    Create task
-                                </button>
-                            )}
-                        />
-                    ) : (
-                        <div className="divide-y divide-white/5">
-                            {tasks.map((task) => (
-                                <div
-                                    key={task._id}
-                                    className={`group p-4 transition-colors ${isOverdue(task.dueDate, task.status) ? 'bg-red-500/10' : 'hover:bg-secondary-900/60'}`}
-                                >
-                                    <div className="flex items-start gap-4">
-                                        <button
-                                            onClick={() => task.status !== 'Completed' && handleComplete(task._id)}
-                                            className="mt-1"
-                                            disabled={task.status === 'Completed'}
-                                        >
-                                            {task.status === 'Completed' ? (
-                                                <CheckCircle className="text-emerald-400" size={24} />
-                                            ) : (
-                                                <Circle className="text-secondary-500 hover:text-brand-400" size={24} />
-                                            )}
-                                        </button>
+                        {overdue && (
+                             <div className="flex items-center gap-1 mt-1 text-xs font-semibold" style={{ color: 'var(--mod-danger)' }}>
+                                 <AlertCircle size={12} /> Overdue
+                             </div>
+                        )}
+                    </div>
+                );
+            }
+        },
+        {
+            id: 'priority',
+            header: 'Priority',
+            width: '12%',
+            cell: (task) => {
+                let variant: 'danger' | 'warning' | 'success' | 'neutral' = 'neutral';
+                if (task.priority === 'High') variant = 'danger';
+                else if (task.priority === 'Medium') variant = 'warning';
+                else if (task.priority === 'Low') variant = 'success';
+                
+                return <ModuleBadge variant={variant}>{task.priority}</ModuleBadge>;
+            }
+        },
+        {
+            id: 'status',
+            header: 'Status',
+            width: '12%',
+            cell: (task) => {
+                let variant: 'success' | 'info' | 'neutral' | 'danger' = 'neutral';
+                if (task.status === 'Completed') variant = 'success';
+                else if (task.status === 'In Progress') variant = 'info';
+                else if (task.status === 'Cancelled') variant = 'danger';
 
-                                        <div className="flex-1">
-                                            <div className="flex items-start justify-between">
-                                                <div className="flex-1">
-                                                    <h3 className={`text-lg font-semibold ${task.status === 'Completed' ? 'line-through text-secondary-500' : 'text-secondary-50'}`}>
-                                                        {task.title}
-                                                    </h3>
-                                                    {task.description && (
-                                                        <p className="text-sm text-secondary-400 mt-1">{task.description}</p>
-                                                    )}
-                                                    <div className="flex flex-wrap items-center gap-3 mt-3">
-                                                        <span className={`status-pill ${getPriorityColor(task.priority)}`}>
-                                                            {task.priority}
-                                                        </span>
-                                                        <span className={`status-pill ${getStatusColor(task.status)}`}>
-                                                            {task.status}
-                                                        </span>
-                                                        <span className="flex items-center gap-1 text-sm text-secondary-400">
-                                                            <Calendar size={14} />
-                                                            {new Date(task.dueDate).toLocaleDateString()}
-                                                        </span>
-                                                        {isOverdue(task.dueDate, task.status) && (
-                                                            <span className="flex items-center gap-1 text-sm text-red-300 font-medium">
-                                                                <AlertCircle size={14} />
-                                                                Overdue
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                </div>
+                return <ModuleBadge variant={variant}>{task.status}</ModuleBadge>;
+            }
+        },
+        {
+            id: 'actions',
+            header: '',
+            align: 'right',
+            width: '80px',
+            cell: (task) => (
+                <ModuleRowActions
+                    actions={[
+                        {
+                            label: 'Edit task',
+                            icon: <Edit size={14} />,
+                            onClick: () => handleEdit(task)
+                        },
+                        {
+                            label: 'Mark complete',
+                            icon: <CheckCircle size={14} />,
+                            onClick: () => handleComplete(task._id, task.status),
+                            divider: true
+                        },
+                        {
+                            label: 'Delete',
+                            icon: <Trash2 size={14} />,
+                            onClick: () => setDeleteId(task._id),
+                            danger: true
+                        }
+                    ]}
+                />
+            )
+        }
+    ];
 
-                                                <div className="flex gap-2 ml-4 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                                                    <button
-                                                        onClick={() => handleEdit(task)}
-                                                        className="icon-button"
-                                                        title="Edit"
-                                                    >
-                                                        <Edit size={18} />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleDelete(task._id)}
-                                                        className="icon-button text-red-400 hover:text-red-300"
-                                                        title="Delete"
-                                                    >
-                                                        <Trash2 size={18} />
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
+    return (
+        <ModulePageShell>
+            <ModulePageHeader
+                eyebrow="Workspace · Tasks"
+                title="Tasks"
+                description="Keep follow-ups, reminders, and ownership visible in one tighter daily operator workspace."
+                actions={
+                    <button
+                        className="mod-btn mod-btn--primary"
+                        onClick={() => {
+                            setEditingTask(null);
+                            setShowModal(true);
+                        }}
+                    >
+                        <Plus size={14} /> New Task
+                    </button>
+                }
+            />
 
-                    {pagination.pages > 1 && (
-                        <div className="px-4 py-3 flex items-center justify-between border-t border-white/5">
-                            <div className="flex-1 flex justify-between sm:hidden">
-                                <button
-                                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                                    disabled={currentPage === 1}
-                                    className="btn btn-outline py-1.5 px-3 text-xs"
-                                >
-                                    Previous
-                                </button>
-                                <button
-                                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, pagination.pages))}
-                                    disabled={currentPage === pagination.pages}
-                                    className="btn btn-outline py-1.5 px-3 text-xs"
-                                >
-                                    Next
-                                </button>
-                            </div>
-                            <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-                                <div>
-                                    <p className="text-sm text-secondary-400">
-                                        Page <span className="font-medium text-secondary-100">{currentPage}</span> of{' '}
-                                        <span className="font-medium text-secondary-100">{pagination.pages}</span>
-                                    </p>
-                                </div>
-                                <div className="flex gap-2">
-                                    <button
-                                        onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                                        disabled={currentPage === 1}
-                                        className="btn btn-outline py-1.5 px-3 text-xs"
-                                    >
-                                        Previous
-                                    </button>
-                                    <button
-                                        onClick={() => setCurrentPage(prev => Math.min(prev + 1, pagination.pages))}
-                                        disabled={currentPage === pagination.pages}
-                                        className="btn btn-outline py-1.5 px-3 text-xs"
-                                    >
-                                        Next
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </SurfaceCard>
+            <ModuleSummaryCards cards={summaryCards} />
 
-                {showModal && (
-                    <TaskFormModal
-                        task={editingTask}
-                        onClose={handleCloseModal}
-                    />
-                )}
-            </PageLayout>
-        </MainLayout>
+            <ModuleToolbar
+                activeFilters={activeFilters}
+                onClearAllFilters={clearFilters}
+                totalCount={pagination.total}
+                countLabel="tasks"
+            >
+                <select
+                    className="mod-toolbar__select"
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                >
+                    <option value="">All status</option>
+                    <option value="Pending">Pending</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="Completed">Completed</option>
+                    <option value="Cancelled">Cancelled</option>
+                </select>
+
+                <select
+                    className="mod-toolbar__select"
+                    value={priorityFilter}
+                    onChange={(e) => setPriorityFilter(e.target.value)}
+                >
+                    <option value="">All priorities</option>
+                    <option value="High">High priority</option>
+                    <option value="Medium">Medium priority</option>
+                    <option value="Low">Low priority</option>
+                </select>
+            </ModuleToolbar>
+
+            {error && (
+                <div style={{
+                    padding: '12px 16px',
+                    background: 'var(--mod-danger-light)',
+                    border: '1px solid #fecaca',
+                    borderRadius: 'var(--mod-radius-lg)',
+                    color: 'var(--mod-danger-text)',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    marginBottom: 16
+                }}>
+                    {error}
+                </div>
+            )}
+
+            <div style={{ marginTop: '16px' }}>
+                <ModuleDataTable
+                    rows={tasks}
+                    columns={columns}
+                    rowKey={(task) => task._id}
+                    loading={loading}
+                    error={null}
+                    tableTitle="To-Do List"
+                    tableBadge={`${tasks.length} visible`}
+                    emptyTitle="No tasks found"
+                    emptyDescription="Create your first task to keep follow-ups and internal execution moving."
+                    emptyIcon={<Inbox size={28} />}
+                    emptyAction={
+                        <button
+                            className="mod-btn mod-btn--primary"
+                            onClick={() => {
+                                setEditingTask(null);
+                                setShowModal(true);
+                            }}
+                        >
+                            <Plus size={14} /> Create task
+                        </button>
+                    }
+                    page={currentPage}
+                    totalPages={pagination.pages}
+                    totalItems={pagination.total}
+                    onPageChange={setCurrentPage}
+                    onRowClick={(task) => handleEdit(task)}
+                />
+            </div>
+
+            <ConfirmDialog
+                open={!!deleteId}
+                title="Delete task"
+                message="Are you sure you want to delete this task? This action cannot be undone."
+                confirmLabel="Delete task"
+                onConfirm={confirmDelete}
+                onCancel={() => setDeleteId(null)}
+            />
+
+            {showModal && (
+                <TaskFormModal
+                    task={editingTask || undefined}
+                    onClose={handleCloseModal}
+                />
+            )}
+        </ModulePageShell>
     );
 };
 

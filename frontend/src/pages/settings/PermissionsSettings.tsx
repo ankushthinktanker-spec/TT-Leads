@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import api from '../../api/axios';
 import { getErrorMessage } from '../../utils/error';
-import SurfaceCard from '../../components/ui/SurfaceCard';
 import Button from '../../components/ui/Button';
 import { FormLabel, SelectInput } from '../../components/ui/Form';
+import WorkspaceSection from '../../components/ui/WorkspaceSection';
 
 type RolePermissions = Record<string, Record<string, boolean>>;
 
@@ -125,14 +125,11 @@ const PermissionsSettings = () => {
     };
 
     return (
-        <SurfaceCard className="p-6">
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
-                <div>
-                    <h2 className="text-xl font-semibold text-secondary-50">Role Permissions</h2>
-                    <p className="text-sm text-secondary-400">
-                        Set module access rules for each role. Changes are enforced immediately.
-                    </p>
-                </div>
+        <WorkspaceSection
+            title="Role permissions"
+            description="Define module-level access by role with immediate enforcement across the CRM workspace."
+            eyebrow="Access policy"
+            aside={(
                 <div className="flex items-center gap-3">
                     <Button variant="secondary" onClick={loadPermissions} disabled={loading}>
                         Refresh
@@ -141,21 +138,16 @@ const PermissionsSettings = () => {
                         {saving ? 'Saving...' : 'Save Changes'}
                     </Button>
                 </div>
-            </div>
+            )}
+        >
 
             {message && (
-                <div
-                    className={`rounded-xl border px-4 py-3 text-sm mb-6 ${
-                        message.type === 'success'
-                            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
-                            : 'border-red-500/30 bg-red-500/10 text-red-300'
-                    }`}
-                >
+                <div className={`workspace-notice mb-6 ${message.type === 'success' ? 'workspace-notice--success' : 'workspace-notice--danger'}`}>
                     {message.text}
                 </div>
             )}
 
-            <div className="flex flex-col lg:flex-row lg:items-end gap-4 mb-6">
+            <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end">
                 <div className="w-full lg:max-w-xs">
                     <FormLabel>Role</FormLabel>
                     <SelectInput value={selectedRole} onChange={(e) => handleRoleChange(e.target.value)}>
@@ -166,17 +158,17 @@ const PermissionsSettings = () => {
                         ))}
                     </SelectInput>
                 </div>
-                <div className="text-xs text-secondary-500 font-semibold uppercase tracking-widest">
+                <div className="text-xs text-slate-900 font-semibold uppercase tracking-widest">
                     {isCustom ? 'Custom rules' : 'Default rules'}
                 </div>
             </div>
 
             {loading ? (
-                <div className="text-secondary-400">Loading permissions...</div>
+                <div className="text-slate-500">Loading permissions...</div>
             ) : (
-                <div className="overflow-auto border border-white/5 rounded-2xl">
+                <div className="overflow-auto rounded-[1.5rem] border border-slate-200 bg-white/72">
                     <table className="min-w-full text-sm">
-                        <thead className="bg-white/5 text-secondary-400 uppercase text-xs">
+                        <thead className="bg-slate-50/90 text-xs uppercase text-slate-500">
                             <tr>
                                 <th className="text-left py-3 px-4">Module</th>
                                 {orderedActions.map((action) => (
@@ -188,8 +180,8 @@ const PermissionsSettings = () => {
                         </thead>
                         <tbody>
                             {orderedModules.map((moduleKey) => (
-                                <tr key={moduleKey} className="border-t border-white/5 hover:bg-secondary-900/40">
-                                    <td className="py-3 px-4 text-secondary-200 font-medium">
+                                <tr key={moduleKey} className="border-t border-slate-200 hover:bg-slate-50">
+                                    <td className="py-3 px-4 text-slate-700 font-medium">
                                         {MODULE_LABELS[moduleKey] || moduleKey}
                                     </td>
                                     {orderedActions.map((actionKey) => {
@@ -200,7 +192,7 @@ const PermissionsSettings = () => {
                                                     type="checkbox"
                                                     checked={checked}
                                                     onChange={() => togglePermission(moduleKey, actionKey)}
-                                                    className="h-4 w-4 rounded border-secondary-700 bg-secondary-900 text-brand-500 focus:ring-brand-500/30"
+                                                    className="h-4 w-4 rounded border-slate-300 bg-white text-brand-500 focus:ring-brand-500/30"
                                                 />
                                             </td>
                                         );
@@ -211,8 +203,10 @@ const PermissionsSettings = () => {
                     </table>
                 </div>
             )}
-        </SurfaceCard>
+        </WorkspaceSection>
     );
 };
 
 export default PermissionsSettings;
+
+

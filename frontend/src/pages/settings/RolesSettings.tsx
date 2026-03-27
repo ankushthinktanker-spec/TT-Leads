@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import api from '../../api/axios';
-import SurfaceCard from '../../components/ui/SurfaceCard';
 import Button from '../../components/ui/Button';
 import Modal from '../../components/ui/Modal';
 import { FormLabel, TextInput, SelectInput } from '../../components/ui/Form';
 import { Table, TableHead, TableRow, TableHeadCell, TableBody, TableCell } from '../../components/ui/Table';
 import { getErrorMessage } from '../../utils/error';
+import InlineError from '../../components/ui/InlineError';
+import RowActions from '../../components/crm/RowActions';
+import WorkspaceSection from '../../components/ui/WorkspaceSection';
 
 interface RoleItem {
     _id: string;
@@ -88,25 +90,23 @@ const RolesSettings = () => {
     };
 
     return (
-        <SurfaceCard className="p-6">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-                <div>
-                    <h2 className="text-xl font-semibold text-secondary-50">Roles</h2>
-                    <p className="text-sm text-secondary-400">Create custom roles and manage access levels.</p>
-                </div>
+        <WorkspaceSection
+            title="Roles"
+            description="Create and manage role definitions that structure access, responsibilities, and permission inheritance."
+            eyebrow="Role catalog"
+            aside={(
                 <Button variant="primary" onClick={handleOpenModal}>
                     <Plus size={18} />
                     Add Role
                 </Button>
-            </div>
+            )}
+        >
 
             {error && (
-                <div className="alert-error mb-6">
-                    {error}
-                </div>
+                <InlineError message={error} onRetry={loadRoles} className="mb-6" />
             )}
 
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto rounded-[1.5rem] border border-slate-200 bg-white/72">
                 <Table>
                     <TableHead>
                         <TableRow>
@@ -119,35 +119,35 @@ const RolesSettings = () => {
                     <TableBody>
                         {loading ? (
                             <TableRow>
-                                <TableCell colSpan={4} className="text-center text-secondary-400">
+                                <TableCell colSpan={4} className="text-center text-slate-500">
                                     Loading roles...
                                 </TableCell>
                             </TableRow>
                         ) : roles.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={4} className="text-center text-secondary-400">
+                                <TableCell colSpan={4} className="text-center text-slate-500">
                                     No roles found.
                                 </TableCell>
                             </TableRow>
                         ) : (
                             roles.map((role) => (
                                 <TableRow key={role._id} className="group">
-                                    <TableCell className="font-medium text-secondary-100">{role.name}</TableCell>
-                                    <TableCell className="text-secondary-400">{role.description || '-'}</TableCell>
-                                    <TableCell className="text-secondary-400">
+                                    <TableCell className="font-medium text-slate-900">{role.name}</TableCell>
+                                    <TableCell className="text-slate-500">{role.description || '-'}</TableCell>
+                                    <TableCell className="text-slate-500">
                                         {role.isSystem ? 'System' : 'Custom'}
                                     </TableCell>
                                     <TableCell className="text-right">
-                                        <div className="flex justify-end">
+                                        <RowActions>
                                             <button
                                                 onClick={() => handleDelete(role._id)}
-                                                className="icon-button text-red-400 hover:text-red-300 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
+                                                className="icon-button text-red-400 hover:text-red-300"
                                                 disabled={role.isSystem}
                                                 title={role.isSystem ? 'System roles cannot be deleted' : 'Delete role'}
                                             >
                                                 <Trash2 size={18} />
                                             </button>
-                                        </div>
+                                        </RowActions>
                                     </TableCell>
                                 </TableRow>
                             ))
@@ -204,7 +204,7 @@ const RolesSettings = () => {
                     </form>
                 </Modal>
             )}
-        </SurfaceCard>
+        </WorkspaceSection>
     );
 };
 

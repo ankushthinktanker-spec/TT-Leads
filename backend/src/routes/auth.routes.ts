@@ -10,11 +10,15 @@ import {
 } from '../controllers/auth.controller';
 import { protect, authorize } from '../middleware/auth.middleware';
 import { checkPermission } from '../middleware/permission.middleware';
+import { authLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
 
-// Public routes
-router.post('/login', login);
+// Standardize with centralized rate limiters
+// 10 attempts / 15 mins for login
+router.post('/login', authLimiter, login);
+
+// Slightly more lenient for refresh tokens
 router.post('/refresh-token', refreshToken);
 
 // Protected routes

@@ -148,12 +148,18 @@ const taskSlice = createSlice({
             })
             .addCase(fetchTasks.fulfilled, (state, action: PayloadAction<TaskApiResponse<TaskListPayload>>) => {
                 state.loading = false;
-                state.tasks = (action.payload.data.tasks || []).map(normalizeTask);
+                const data = (action.payload?.data || {}) as TaskListPayload & {
+                    items?: TaskApi[];
+                    meta?: TaskListPayload['pagination'];
+                };
+                const pagination = data.pagination || data.meta || {};
+                const items = data.tasks || data.items || [];
+                state.tasks = items.map(normalizeTask);
                 state.pagination = {
-                    total: action.payload.data.pagination.total || 0,
-                    page: action.payload.data.pagination.page || 1,
-                    pages: action.payload.data.pagination.pages || 1,
-                    limit: action.payload.data.pagination.limit || 10,
+                    total: pagination.total || 0,
+                    page: pagination.page || 1,
+                    pages: pagination.pages || 1,
+                    limit: pagination.limit || 10,
                 };
             })
             .addCase(fetchTasks.rejected, (state, action) => {

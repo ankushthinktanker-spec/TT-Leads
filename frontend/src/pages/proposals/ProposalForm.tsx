@@ -13,13 +13,11 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '../../hooks/redux';
 import { createProposal, updateProposal, fetchProposalById } from '../../store/slices/proposalSlice';
 import { fetchLeads } from '../../store/slices/leadSlice';
-import MainLayout from '../../components/layout/MainLayout';
 import { ArrowLeft, Plus, Trash2, GripVertical } from 'lucide-react';
 import PageLayout from '../../components/ui/PageLayout';
-import PageHeader from '../../components/ui/PageHeader';
-import SurfaceCard from '../../components/ui/SurfaceCard';
 import Button from '../../components/ui/Button';
 import { FormLabel, TextInput, SelectInput, ErrorText } from '../../components/ui/Form';
+import WorkspaceSection from '../../components/ui/WorkspaceSection';
 import api from '../../api/axios';
 import { getErrorMessage } from '../../utils/error';
 
@@ -33,6 +31,16 @@ interface ProposalSection {
     isVisible: boolean;
     includeInTOC: boolean;
 }
+
+const resolveProposalLeadId = (
+    leadId: string | { _id: string; firstName?: string; lastName?: string; email?: string } | undefined
+) => (typeof leadId === 'string' ? leadId : leadId?._id || '');
+
+const normalizeContentType = (value: string | undefined): ProposalSection['contentType'] => {
+    if (value === 'table' || value === 'Table') return 'table';
+    if (value === 'mixed' || value === 'Mixed') return 'mixed';
+    return 'richText';
+};
 
 interface TocEntry {
     title: string;
@@ -254,9 +262,9 @@ const SectionEditor = ({ index, content, onContentChange, onContentTypeChange }:
 
     return (
         <div className="space-y-3">
-            <div className="surface-card-muted p-3">
+            <div className="rounded-[20px] border border-slate-200 bg-slate-50/80 p-3">
                 <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs uppercase text-secondary-500 mr-2">Text</span>
+                    <span className="mr-2 text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Text</span>
                 <Button
                     type="button"
                     variant="secondary"
@@ -301,7 +309,7 @@ const SectionEditor = ({ index, content, onContentChange, onContentTypeChange }:
                 </Button>
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <span className="text-xs uppercase text-secondary-500 mr-2">Tables</span>
+                    <span className="mr-2 text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Tables</span>
                 <Button
                     type="button"
                     variant="secondary"
@@ -416,7 +424,7 @@ const ProposalForm = () => {
             const logoUrl = extractUploadsPath(rawLogoUrl);
             setFormData({
                 title: currentProposal.title || '',
-                leadId: currentProposal.leadId || '',
+                leadId: resolveProposalLeadId(currentProposal.leadId),
                 clientName: currentProposal.clientDetails?.contactPerson || currentProposal.clientName || '',
                 clientEmail: currentProposal.clientDetails?.email || currentProposal.clientEmail || '',
                 clientPhone: currentProposal.clientDetails?.phone || currentProposal.clientPhone || '',
@@ -436,7 +444,7 @@ const ProposalForm = () => {
                         : createLocalId(),
                     title: typeof s.title === 'string' ? s.title : (typeof s.sectionTitle === 'string' ? s.sectionTitle : ''),
                     content: typeof s.content === 'string' ? s.content : '',
-                    contentType: typeof s.contentType === 'string' ? s.contentType : 'richText',
+                    contentType: normalizeContentType(typeof s.contentType === 'string' ? s.contentType : undefined),
                     order: idx,
                     isVisible: s.isVisible !== false,
                     includeInTOC: s.includeInTOC !== false,
@@ -655,70 +663,114 @@ const ProposalForm = () => {
     };
 
     return (
-        <MainLayout>
-            <PageLayout>
+            <PageLayout className="space-y-8 pb-20">
                 <div className="mb-4">
                     <button
                         onClick={() => navigate('/proposals')}
-                        className="text-secondary-400 hover:text-secondary-200 flex items-center gap-1"
+                        className="flex items-center gap-1 text-slate-500 hover:text-slate-900"
                     >
                         <ArrowLeft size={20} />
                         Back to Proposals
                     </button>
                 </div>
 
-                <PageHeader
-                    title={id ? 'Edit Proposal' : 'Create New Proposal'}
-                    subtitle="Prepare and send a client-ready proposal"
-                />
+                <div className="workspace-hero relative overflow-hidden p-7">
+                    <div className="absolute top-0 right-0 h-full w-1/2 bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.10),transparent_72%)]" />
+                    <div className="relative z-10 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+                        <div>
+                            <div className="mb-2 flex items-center gap-3">
+                                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">
+                                    Proposal builder
+                                </span>
+                                <span className="h-px w-8 bg-slate-300" />
+                                <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                                    Client-ready document flow
+                                </span>
+                            </div>
+                            <h1 className="text-3xl font-black tracking-tight text-slate-950 md:text-[2.2rem]">
+                                {id ? 'Edit' : 'Create'} <span className="bg-gradient-to-r from-emerald-600 to-teal-500 bg-clip-text text-transparent">Proposal</span>
+                            </h1>
+                            <p className="mt-2 max-w-2xl text-sm font-medium leading-6 text-slate-600">
+                                Build a clean, branded proposal with structured sections, client details, and a share-ready preview.
+                            </p>
+                            <div className="mt-4 flex flex-wrap items-center gap-2">
+                                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-600">
+                                    Client details
+                                </span>
+                                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-600">
+                                    Section outline
+                                </span>
+                                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-600">
+                                    Preview-ready
+                                </span>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 sm:flex">
+                            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Sections</div>
+                                <div className="mt-1 text-xl font-black text-slate-950">{sections.length}</div>
+                            </div>
+                            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Status</div>
+                                <div className="mt-1 text-xl font-black text-slate-950">{formData.status}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
-                <form onSubmit={handleSubmit} className="space-y-6 mt-6">
+                <form onSubmit={handleSubmit} className="mt-5 space-y-5">
                     {formError && (
                         <div className="alert-error">
                             {formError}
                         </div>
                     )}
 
-                    <SurfaceCard className="p-6 space-y-4">
-                        <h2 className="text-xl font-semibold text-secondary-50 mb-4">Basic Information</h2>
+                    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+                        <div className="space-y-6">
+                            <WorkspaceSection
+                                title="Basic information"
+                                description="Link the proposal to an existing lead when available and set the core document identity before composition."
+                                eyebrow="Proposal setup"
+                            >
+                                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                    <div className="md:col-span-2">
+                                        <FormLabel>
+                                            Proposal Title <span className="text-red-500">*</span>
+                                        </FormLabel>
+                                        <TextInput
+                                            type="text"
+                                            name="title"
+                                            value={formData.title}
+                                            onChange={handleChange}
+                                            required
+                                            placeholder="e.g., Website Development Proposal"
+                                        />
+                                        {fieldErrors.title && <ErrorText>{fieldErrors.title}</ErrorText>}
+                                    </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="md:col-span-2">
-                                <FormLabel>
-                                    Proposal Title <span className="text-red-500">*</span>
-                                </FormLabel>
-                                <TextInput
-                                    type="text"
-                                    name="title"
-                                    value={formData.title}
-                                    onChange={handleChange}
-                                    required
-                                    placeholder="e.g., Website Development Proposal"
-                                />
-                                {fieldErrors.title && <ErrorText>{fieldErrors.title}</ErrorText>}
-                            </div>
+                                    <div className="md:col-span-2">
+                                        <FormLabel>Link to Lead (Optional)</FormLabel>
+                                        <SelectInput
+                                            name="leadId"
+                                            value={formData.leadId}
+                                            onChange={handleLeadChange}
+                                        >
+                                            <option value="">Select Lead (or enter client details manually)</option>
+                                            {leads.map((lead) => (
+                                                <option key={lead._id} value={lead._id}>
+                                                    {lead.firstName} {lead.lastName} - {lead.company || lead.email}
+                                                </option>
+                                            ))}
+                                        </SelectInput>
+                                    </div>
+                                </div>
+                            </WorkspaceSection>
 
-                            <div className="md:col-span-2">
-                                <FormLabel>Link to Lead (Optional)</FormLabel>
-                                <SelectInput
-                                    name="leadId"
-                                    value={formData.leadId}
-                                    onChange={handleLeadChange}
-                                >
-                                    <option value="">Select Lead (or enter client details manually)</option>
-                                    {leads.map((lead) => (
-                                        <option key={lead._id} value={lead._id}>
-                                            {lead.firstName} {lead.lastName} - {lead.company || lead.email}
-                                        </option>
-                                    ))}
-                                </SelectInput>
-                            </div>
-                        </div>
-                    </SurfaceCard>
-
-                    <SurfaceCard className="p-6 space-y-4">
-                        <h2 className="text-xl font-semibold text-secondary-50 mb-4">Client Information</h2>
-
+                            <WorkspaceSection
+                                title="Client information"
+                                description="Keep the recipient details accurate so previews, delivery, and approval flows stay clean."
+                                eyebrow="Client details"
+                            >
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <FormLabel>
@@ -776,11 +828,13 @@ const ProposalForm = () => {
                                 {fieldErrors.clientCompany && <ErrorText>{fieldErrors.clientCompany}</ErrorText>}
                             </div>
                         </div>
-                    </SurfaceCard>
+                            </WorkspaceSection>
 
-                    <SurfaceCard className="p-6 space-y-4">
-                        <h2 className="text-xl font-semibold text-secondary-50 mb-4">Proposal Details</h2>
-
+                            <WorkspaceSection
+                                title="Proposal details"
+                                description="Control validity, amount context, and lifecycle status before publishing or sending."
+                                eyebrow="Commercial settings"
+                            >
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div>
                                 <FormLabel>
@@ -822,11 +876,13 @@ const ProposalForm = () => {
                                 </SelectInput>
                             </div>
                         </div>
-                    </SurfaceCard>
+                            </WorkspaceSection>
 
-                    <SurfaceCard className="p-6 space-y-4">
-                        <h2 className="text-xl font-semibold text-secondary-50 mb-4">Branding & Footer</h2>
-
+                            <WorkspaceSection
+                                title="Branding and footer"
+                                description="Set the document branding, footer identity, and generated table-of-contents behavior."
+                                eyebrow="Brand and output"
+                            >
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <FormLabel>Logo (Header)</FormLabel>
@@ -837,11 +893,11 @@ const ProposalForm = () => {
                                     className="input"
                                 />
                                 {logoUploading && (
-                                    <p className="text-xs text-secondary-400 mt-2">Uploading logo...</p>
+                                    <p className="mt-2 text-xs text-slate-500">Uploading logo...</p>
                                 )}
                                 {logoError && <ErrorText>{logoError}</ErrorText>}
                                 {logoPreviewUrl && (
-                                    <div className="mt-3 inline-flex items-center rounded-lg border border-white/10 bg-secondary-900/60 px-3 py-2">
+                                    <div className="mt-3 inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
                                         <img src={logoPreviewUrl} alt="Logo preview" className="h-10 object-contain" />
                                     </div>
                                 )}
@@ -871,7 +927,7 @@ const ProposalForm = () => {
                             <div className="md:col-span-2">
                                 <FormLabel>Index (Table of Contents)</FormLabel>
                                 <div className="flex flex-wrap items-center gap-3 mb-3 text-sm">
-                                    <span className="text-secondary-400">Include headings:</span>
+                                    <span className="text-slate-500">Include headings:</span>
                                     <SelectInput
                                         name="tocDepth"
                                         value={formData.tocDepth}
@@ -888,154 +944,192 @@ const ProposalForm = () => {
                                             {tocEntries.map((entry, index) => (
                                                 <li
                                                     key={`${entry.id}-${index}`}
-                                                    className="flex items-start gap-2 text-secondary-200 break-words"
+                                                    className="flex items-start gap-2 break-words text-slate-700"
                                                     style={{ marginLeft: `${(entry.level - 1) * 16}px` }}
                                                 >
-                                                    <span className="text-secondary-500">{index + 1}.</span>
+                                                    <span className="text-slate-500">{index + 1}.</span>
                                                     <span>{entry.title}</span>
                                                 </li>
                                             ))}
                                         </ol>
                                     ) : (
-                                        <p className="text-secondary-400">
+                                        <p className="text-slate-500">
                                             Add section titles or headings to populate the index.
                                         </p>
                                     )}
                                 </div>
                             </div>
                         </div>
-                    </SurfaceCard>
+                            </WorkspaceSection>
 
-                    <SurfaceCard className="p-6 space-y-4">
-                        <div className="flex justify-between items-center mb-4">
-                            <h2 className="text-xl font-semibold text-secondary-50">Proposal Content</h2>
-                            <Button
-                                type="button"
-                                onClick={addSection}
-                                variant="secondary"
+                            <WorkspaceSection
+                                title="Proposal content"
+                                description="Compose section-by-section content with a clearer outline and editing path for long proposals."
+                                eyebrow="Content editor"
+                                aside={
+                                    <Button
+                                        type="button"
+                                        onClick={addSection}
+                                        variant="secondary"
+                                    >
+                                        <Plus size={18} />
+                                        Add Section
+                                    </Button>
+                                }
                             >
-                                <Plus size={18} />
-                                Add Section
-                            </Button>
-                        </div>
 
-                        <div className="surface-card-muted p-4">
-                            <div className="text-sm font-semibold text-secondary-200">Section Outline</div>
-                            <div className="text-xs text-secondary-500 mt-1 mb-2">
-                                Jump to a section while editing long proposals.
-                            </div>
-                            {sections.length > 0 ? (
-                                <div className="flex flex-wrap gap-2">
-                                    {sections
-                                        .slice()
-                                        .sort((a, b) => a.order - b.order)
-                                        .map((section, index) => (
-                                            <button
-                                                key={section.localId || index}
-                                                type="button"
-                                                className="px-3 py-1 rounded-full bg-secondary-800 text-secondary-200 text-xs hover:bg-secondary-700"
-                                                onClick={() => sectionRefs.current[index]?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                                            >
-                                                {section.title || `Section ${index + 1}`}
-                                            </button>
-                                        ))}
+                                <div className="rounded-[22px] border border-slate-200 bg-slate-50/80 p-4">
+                                    <div className="text-sm font-semibold text-slate-800">Section Outline</div>
+                                    <div className="mb-2 mt-1 text-xs text-slate-500">
+                                        Jump to a section while editing long proposals.
+                                    </div>
+                                    {sections.length > 0 ? (
+                                        <div className="flex flex-wrap gap-2">
+                                            {sections
+                                                .slice()
+                                                .sort((a, b) => a.order - b.order)
+                                                .map((section, index) => (
+                                                    <button
+                                                        key={section.localId || index}
+                                                        type="button"
+                                                        className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
+                                                        onClick={() => sectionRefs.current[index]?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                                                    >
+                                                        {section.title || `Section ${index + 1}`}
+                                                    </button>
+                                                ))}
+                                        </div>
+                                    ) : (
+                                        <div className="text-sm text-slate-500">No sections yet.</div>
+                                    )}
                                 </div>
-                            ) : (
-                                <div className="text-sm text-secondary-500">No sections yet.</div>
-                            )}
+
+                                <div className="space-y-4">
+                                    {sections.map((section, index) => (
+                                        <div
+                                            key={section.localId || index}
+                                            ref={(el) => {
+                                                sectionRefs.current[index] = el;
+                                            }}
+                                            className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm"
+                                        >
+                                            <div className="flex items-start gap-3">
+                                                <div className="mt-2 rounded-xl bg-slate-100 p-2 text-slate-500">
+                                                    <GripVertical size={18} />
+                                                </div>
+                                                <div className="flex-1 space-y-4">
+                                                    <div className="flex gap-3">
+                                                        <TextInput
+                                                            type="text"
+                                                            value={section.title}
+                                                            onChange={(e) => handleSectionChange(index, 'title', e.target.value)}
+                                                            className="flex-1 font-medium"
+                                                            placeholder="Section Title"
+                                                        />
+                                                        <Button
+                                                            type="button"
+                                                            onClick={() => removeSection(index)}
+                                                            variant="danger"
+                                                            className="px-3"
+                                                        >
+                                                            <Trash2 size={18} />
+                                                        </Button>
+                                                    </div>
+                                                    <SectionEditor
+                                                        index={index}
+                                                        content={section.content}
+                                                        onContentChange={(idx, value) => handleSectionChange(idx, 'content', value)}
+                                                        onContentTypeChange={(idx, value) => handleSectionChange(idx, 'contentType', value)}
+                                                    />
+                                                    <div className="flex flex-wrap items-center gap-4 text-sm">
+                                                        <label className="flex cursor-pointer items-center gap-2 text-slate-600">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={section.isVisible}
+                                                                onChange={(e) => handleSectionChange(index, 'isVisible', e.target.checked)}
+                                                                className="checkbox"
+                                                            />
+                                                            <span>Visible in proposal</span>
+                                                        </label>
+                                                        <label className="flex cursor-pointer items-center gap-2 text-slate-600">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={section.includeInTOC}
+                                                                onChange={(e) => handleSectionChange(index, 'includeInTOC', e.target.checked)}
+                                                                className="checkbox"
+                                                            />
+                                                            <span>Include in Table of Contents</span>
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {sections.length === 0 && (
+                                    <div className="empty-state">
+                                        <p>No sections added yet. Click &quot;Add Section&quot; to start building your proposal.</p>
+                                    </div>
+                                )}
+                            </WorkspaceSection>
                         </div>
 
-                        <div className="space-y-4">
-                            {sections.map((section, index) => (
-                                <div
-                                    key={section.localId || index}
-                                    ref={(el) => {
-                                        sectionRefs.current[index] = el;
-                                    }}
-                                    className="surface-card-muted p-4 space-y-3"
-                                >
-                                    <div className="flex items-start gap-3">
-                                        <div className="mt-2 cursor-move text-secondary-500">
-                                            <GripVertical size={20} />
-                                        </div>
-                                        <div className="flex-1 space-y-3">
-                                            <div className="flex gap-3">
-                                                <TextInput
-                                                    type="text"
-                                                    value={section.title}
-                                                    onChange={(e) => handleSectionChange(index, 'title', e.target.value)}
-                                                    className="flex-1 font-medium"
-                                                    placeholder="Section Title"
-                                                />
-                                                <Button
-                                                    type="button"
-                                                    onClick={() => removeSection(index)}
-                                                    variant="danger"
-                                                    className="px-3"
-                                                >
-                                                    <Trash2 size={18} />
-                                                </Button>
-                                            </div>
-                                            <SectionEditor
-                                                index={index}
-                                                content={section.content}
-                                                onContentChange={(idx, value) => handleSectionChange(idx, 'content', value)}
-                                                onContentTypeChange={(idx, value) => handleSectionChange(idx, 'contentType', value)}
-                                            />
-                                            <div className="flex flex-wrap items-center gap-4 text-sm">
-                                                <label className="flex items-center gap-2 cursor-pointer text-secondary-300">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={section.isVisible}
-                                                        onChange={(e) => handleSectionChange(index, 'isVisible', e.target.checked)}
-                                                        className="checkbox"
-                                                    />
-                                                    <span>Visible in proposal</span>
-                                                </label>
-                                                <label className="flex items-center gap-2 cursor-pointer text-secondary-300">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={section.includeInTOC}
-                                                        onChange={(e) => handleSectionChange(index, 'includeInTOC', e.target.checked)}
-                                                        className="checkbox"
-                                                    />
-                                                    <span>Include in Table of Contents</span>
-                                                </label>
-                                            </div>
-                                        </div>
+                        <div className="space-y-6">
+                            <WorkspaceSection
+                                title="At a glance"
+                                description="Quick summary of the document state while you edit."
+                                eyebrow="Document summary"
+                            >
+                                <div className="space-y-4 text-sm">
+                                    <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                                        <span className="font-medium text-slate-600">Client</span>
+                                        <span className="font-semibold text-slate-950">{formData.clientCompany || 'Not set'}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                                        <span className="font-medium text-slate-600">Valid until</span>
+                                        <span className="font-semibold text-slate-950">{formData.validTill || 'Not set'}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                                        <span className="font-medium text-slate-600">Total amount</span>
+                                        <span className="font-semibold text-slate-950">{formData.totalAmount || 'Not set'}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                                        <span className="font-medium text-slate-600">TOC depth</span>
+                                        <span className="font-semibold text-slate-950">H1 + {Math.max(formData.tocDepth - 1, 0)} levels</span>
                                     </div>
                                 </div>
-                            ))}
-                        </div>
+                            </WorkspaceSection>
 
-                        {sections.length === 0 && (
-                            <div className="empty-state">
-                                <p>No sections added yet. Click &quot;Add Section&quot; to start building your proposal.</p>
-                            </div>
-                        )}
-                    </SurfaceCard>
-
-                    <SurfaceCard className="p-6">
-                        <div className="form-actions">
-                            <Button
-                                type="button"
-                                onClick={() => navigate('/proposals')}
-                                variant="outline"
+                            <WorkspaceSection
+                                title="Save proposal"
+                                description="Review the document state, then save or return to the proposal list."
+                                eyebrow="Publishing"
                             >
-                                Cancel
-                            </Button>
-                            <Button
-                                type="submit"
-                                disabled={loading}
-                                variant="primary"
-                            >
-                                {loading ? 'Saving...' : id ? 'Update Proposal' : 'Create Proposal'}
-                            </Button>
+                                <div className="rounded-[20px] border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                                    Review client data, section order, and branding before saving.
+                                </div>
+                                <div className="form-actions mt-5 border-t-0 px-0 pt-0">
+                                    <Button
+                                        type="button"
+                                        onClick={() => navigate('/proposals')}
+                                        variant="outline"
+                                    >
+                                        Cancel
+                                    </Button>
+                                    <Button
+                                        type="submit"
+                                        disabled={loading}
+                                        variant="primary"
+                                    >
+                                        {loading ? 'Saving...' : id ? 'Update Proposal' : 'Create Proposal'}
+                                    </Button>
+                                </div>
+                            </WorkspaceSection>
                         </div>
-                    </SurfaceCard>
+                    </div>
                 </form>
             </PageLayout>
-        </MainLayout>
     );
 };
 

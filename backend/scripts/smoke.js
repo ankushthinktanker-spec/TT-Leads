@@ -4,6 +4,7 @@ const getEnv = (key, fallback) => {
 };
 
 const BASE_URL = getEnv('SMOKE_BASE_URL', 'http://localhost:5000/api');
+const HEALTH_URL = getEnv('SMOKE_HEALTH_URL', 'http://localhost:5000/health');
 const EMAIL = getEnv('SMOKE_EMAIL', '');
 const PASSWORD = getEnv('SMOKE_PASSWORD', '');
 
@@ -33,7 +34,7 @@ const request = async (path, options = {}) => {
 const run = async () => {
     log(`Smoke test: ${BASE_URL}`);
 
-    const health = await request('/health');
+    const health = await fetch(HEALTH_URL);
     if (!health.ok) {
         log(`Health check failed (${health.status}).`);
         process.exit(1);
@@ -67,6 +68,20 @@ const run = async () => {
         process.exit(1);
     }
     log('Leads check OK.');
+
+    const companies = await request('/companies?limit=1', { headers: authHeaders });
+    if (!companies.ok) {
+        log(`Companies check failed (${companies.status}).`);
+        process.exit(1);
+    }
+    log('Companies check OK.');
+
+    const contacts = await request('/contacts?limit=1', { headers: authHeaders });
+    if (!contacts.ok) {
+        log(`Contacts check failed (${contacts.status}).`);
+        process.exit(1);
+    }
+    log('Contacts check OK.');
 
     const proposals = await request('/proposals?limit=1', { headers: authHeaders });
     if (!proposals.ok) {

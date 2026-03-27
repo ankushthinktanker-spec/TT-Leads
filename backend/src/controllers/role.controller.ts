@@ -5,6 +5,7 @@ import RolePermission from '../models/role-permission.model';
 import User from '../models/user.model';
 import { AppError } from '../middleware/errorHandler';
 import { emptyPermissions, getEffectivePermissions, mergePermissions, sanitizePermissions } from '../utils/permission.utils';
+import { writeAuditLog } from '../services/audit.service';
 
 export const getRoles = async (_req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -61,6 +62,17 @@ export const createRole = async (req: AuthRequest, res: Response, next: NextFunc
             success: true,
             data: { role }
         });
+
+        void writeAuditLog({
+            tenantId: req.tenantId!,
+            actorId: req.user?._id.toString(),
+            action: 'ROLE_CREATED',
+            entityType: 'Role',
+            entityId: role._id.toString(),
+            ip: req.ip,
+            requestId: (req as AuthRequest & { id?: string }).id,
+            changes: { roleName: role.name }
+        });
     } catch (error) {
         next(error);
     }
@@ -98,6 +110,17 @@ export const updateRole = async (req: AuthRequest, res: Response, next: NextFunc
         await role.save();
 
         res.status(200).json({ success: true, data: { role } });
+
+        void writeAuditLog({
+            tenantId: req.tenantId!,
+            actorId: req.user?._id.toString(),
+            action: 'ROLE_UPDATED',
+            entityType: 'Role',
+            entityId: role._id.toString(),
+            ip: req.ip,
+            requestId: (req as AuthRequest & { id?: string }).id,
+            changes: { name, description }
+        });
     } catch (error) {
         next(error);
     }
@@ -125,6 +148,17 @@ export const deleteRole = async (req: AuthRequest, res: Response, next: NextFunc
         await role.deleteOne();
 
         res.status(200).json({ success: true, message: 'Role deleted' });
+
+        void writeAuditLog({
+            tenantId: req.tenantId!,
+            actorId: req.user?._id.toString(),
+            action: 'ROLE_DELETED',
+            entityType: 'Role',
+            entityId: role._id.toString(),
+            ip: req.ip,
+            requestId: (req as AuthRequest & { id?: string }).id,
+            changes: { roleName: role.name }
+        });
     } catch (error) {
         next(error);
     }

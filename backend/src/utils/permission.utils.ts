@@ -1,6 +1,12 @@
 import RolePermission from '../models/role-permission.model';
 
 export const PERMISSION_MODULES = [
+    'deals',
+    'pipelines',
+    'contracts',
+    'invoices',
+    'subscriptions',
+    'notifications',
     'leads',
     'companies',
     'contacts',
@@ -61,6 +67,12 @@ const withOverrides = (
 
 export const DEFAULT_ROLE_PERMISSIONS: Record<string, RolePermissions> = {
     Admin: {
+        deals: allTrue(),
+        pipelines: allTrue(),
+        contracts: allTrue(),
+        invoices: allTrue(),
+        subscriptions: allTrue(),
+        notifications: withOverrides(allTrue(), { create: false, delete: false, assign: false, status_change: false }),
         leads: allTrue(),
         companies: allTrue(),
         contacts: allTrue(),
@@ -74,6 +86,12 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, RolePermissions> = {
         activities: allTrue()
     },
     Manager: {
+        deals: allTrue(),
+        pipelines: allTrue(),
+        contracts: allTrue(),
+        invoices: allTrue(),
+        subscriptions: allTrue(),
+        notifications: withOverrides(allTrue(), { create: false, delete: false, assign: false, status_change: false }),
         leads: allTrue(),
         companies: allTrue(),
         contacts: allTrue(),
@@ -87,6 +105,12 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, RolePermissions> = {
         activities: allTrue()
     },
     BDM: {
+        deals: withOverrides(allTrue(), { delete: false, assign: false }),
+        pipelines: withOverrides(allTrue(), { delete: false, assign: false }),
+        contracts: withOverrides(allTrue(), { delete: false, assign: false }),
+        invoices: withOverrides(allTrue(), { delete: false, assign: false }),
+        subscriptions: withOverrides(allTrue(), { delete: false, assign: false }),
+        notifications: withOverrides(allTrue(), { create: false, delete: false, assign: false, status_change: false }),
         leads: withOverrides(allTrue(), { delete: false, assign: false }),
         companies: withOverrides(allTrue(), { delete: false }),
         contacts: allTrue(),
@@ -100,6 +124,12 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, RolePermissions> = {
         activities: allTrue()
     },
     Marketing: {
+        deals: withOverrides(allTrue(), { delete: false, assign: false }),
+        pipelines: withOverrides(allTrue(), { delete: false, assign: false }),
+        contracts: withOverrides(allTrue(), { delete: false, assign: false }),
+        invoices: withOverrides(allTrue(), { delete: false, assign: false }),
+        subscriptions: withOverrides(allTrue(), { delete: false, assign: false }),
+        notifications: withOverrides(allTrue(), { create: false, delete: false, assign: false, status_change: false }),
         leads: withOverrides(allTrue(), { delete: false, assign: false }),
         companies: withOverrides(allTrue(), { delete: false }),
         contacts: allTrue(),
@@ -113,6 +143,12 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, RolePermissions> = {
         activities: allTrue()
     },
     User: {
+        deals: withOverrides(allTrue(), { delete: false, assign: false }),
+        pipelines: withOverrides(allTrue(), { delete: false, assign: false }),
+        contracts: withOverrides(allTrue(), { delete: false, assign: false }),
+        invoices: withOverrides(allTrue(), { delete: false, assign: false }),
+        subscriptions: withOverrides(allTrue(), { delete: false, assign: false }),
+        notifications: withOverrides(allTrue(), { create: false, delete: false, assign: false, status_change: false }),
         leads: withOverrides(allTrue(), { delete: false, assign: false }),
         companies: withOverrides(allTrue(), { delete: false }),
         contacts: allTrue(),

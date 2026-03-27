@@ -95,3 +95,9 @@ export const updateProposalSchema = Joi.object({
     notes: Joi.string().optional(),
     sections: Joi.array().items(proposalSectionSchema).optional()
 });
+
+export const sendProposalSchema = Joi.object({
+    to: Joi.string().email().optional(),
+    subject: Joi.string().max(200).optional(),
+    message: Joi.string().max(5000).allow('').optional()
+});

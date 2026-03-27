@@ -1,6 +1,7 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
 export interface ILead extends Document {
+    tenantId: mongoose.Types.ObjectId;
     leadNumber: string;
 
     // Contact Information
@@ -81,10 +82,15 @@ export interface ILead extends Document {
 
 const leadSchema = new Schema<ILead>(
     {
+        tenantId: {
+            type: Schema.Types.ObjectId,
+            ref: 'Tenant',
+            required: [true, 'Tenant ID is strongly required to identify lead containment']
+        },
         leadNumber: {
             type: String,
-            unique: true,
             required: true
+            // Removed global unique: true, enforced via compound index instead
         },
 
         // Contact Information
@@ -312,7 +318,7 @@ const leadSchema = new Schema<ILead>(
 leadSchema.pre('validate', async function (next) {
     if (this.isNew && !this.leadNumber) {
         const year = new Date().getFullYear();
-        const count = await mongoose.model('Lead').countDocuments();
+        const count = await mongoose.model('Lead').countDocuments({ tenantId: this.tenantId });
         this.leadNumber = `LD-${year}-${String(count + 1).padStart(4, '0')}`;
         if (!this.lastStageChangedAt) {
             this.lastStageChangedAt = new Date();
@@ -321,7 +327,24 @@ leadSchema.pre('validate', async function (next) {
     next();
 });
 
-// Indexes for performance
+// Indexes for performance & Multi-Tenancy
+// Enforce unique leadNumber and email PER tenant
+leadSchema.index({ tenantId: 1, leadNumber: 1 }, { unique: true });
+leadSchema.index({ tenantId: 1, email: 1 });
+
+// Common tenant-scoped query indexes
+leadSchema.index({ tenantId: 1, status: 1 });
+leadSchema.index({ tenantId: 1, createdAt: -1 });
+leadSchema.index({ tenantId: 1, assignedTo: 1, status: 1 });
+leadSchema.index({ tenantId: 1, ownerId: 1 });
+leadSchema.index({ tenantId: 1, nextFollowUpDate: 1 });
+leadSchema.index({ tenantId: 1, source: 1 });
+leadSchema.index({ tenantId: 1, company: 1 });
+leadSchema.index({ tenantId: 1, tags: 1 });
+leadSchema.index({ tenantId: 1, priority: 1 });
+leadSchema.index({ tenantId: 1, status: 1, lastStageChangedAt: 1, ownerId: 1 });
+
+// Global indexes (if queries might not always include tenantId)
 leadSchema.index({ email: 1 });
 leadSchema.index({ phone: 1 });
 leadSchema.index({ status: 1, assignedTo: 1 });

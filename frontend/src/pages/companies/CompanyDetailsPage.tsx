@@ -2,12 +2,8 @@ import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '../../hooks/redux';
 import { fetchCompany, clearCurrentCompany } from '../../store/slices/companySlice';
-import MainLayout from '../../components/layout/MainLayout';
-import { ArrowLeft, Building2, Edit } from 'lucide-react';
-import PageLayout from '../../components/ui/PageLayout';
-import PageHeader from '../../components/ui/PageHeader';
-import SurfaceCard from '../../components/ui/SurfaceCard';
-import EmptyState from '../../components/ui/EmptyState';
+import { ArrowLeft, Building2, Edit, Globe, Mail, Phone } from 'lucide-react';
+import WorkspaceSection from '../../components/ui/WorkspaceSection';
 
 const CompanyDetailsPage = () => {
     const { id } = useParams<{ id: string }>();
@@ -26,178 +22,234 @@ const CompanyDetailsPage = () => {
 
     if (loading) {
         return (
-            <MainLayout>
-                <PageLayout>
-                    <div className="flex justify-center items-center h-64">
-                        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-brand-500"></div>
+            <div className="page-layout flex justify-center items-center h-[60vh]">
+                <div className="relative">
+                    <div className="h-16 w-16 rounded-full border-4 border-slate-100 border-t-indigo-500 animate-spin" />
+                    <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="h-2 w-2 rounded-full bg-indigo-500 animate-ping" />
                     </div>
-                </PageLayout>
-            </MainLayout>
+                </div>
+            </div>
         );
     }
 
     if (!currentCompany) {
         return (
-            <MainLayout>
-                <PageLayout>
-                    <button
-                        onClick={() => navigate('/companies')}
-                        className="flex items-center text-secondary-400 hover:text-secondary-200 mb-4"
-                    >
-                        <ArrowLeft size={20} className="mr-2" />
-                        Back to Companies
-                    </button>
-                    <SurfaceCard className="p-6">
-                        <EmptyState title="Company not found." />
-                    </SurfaceCard>
-                </PageLayout>
-            </MainLayout>
+            <div className="page-layout space-y-8">
+                <button
+                    onClick={() => navigate('/companies')}
+                    className="group flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500 transition-all hover:text-sky-700"
+                >
+                    <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
+                    Back to Companies
+                </button>
+                <div className="rounded-[28px] border border-slate-200/80 bg-white p-12 text-center shadow-[0_18px_48px_rgba(15,23,42,0.06)]">
+                    <p className="mb-2 text-xl font-black tracking-tight text-slate-900">Company not found</p>
+                    <p className="text-sm font-medium text-slate-500">The requested company record could not be loaded.</p>
+                </div>
+            </div>
         );
     }
 
     const address = currentCompany.address || {};
+    const tagsCount = currentCompany.tags?.length || 0;
 
     return (
-        <MainLayout>
-            <PageLayout>
-                <div className="mb-4">
+        <div className="page-layout space-y-5 pb-16">
+            <div className="tt-animate-fade-up">
+                <button
+                    onClick={() => navigate('/companies')}
+                    className="group mb-5 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500 transition-all hover:text-sky-700"
+                >
+                    <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
+                    Back to Companies
+                </button>
+
+                <div className="workspace-hero flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+                    <div className="space-y-2">
+                        <div className="flex items-center gap-3">
+                            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">
+                                Company record
+                            </span>
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                                {currentCompany.industry || 'General'}
+                            </span>
+                        </div>
+                        <h1 className="text-3xl font-black tracking-tight text-slate-950">{currentCompany.name}</h1>
+                        <p className="text-sm font-medium text-slate-500">
+                            Review account profile, communication details, operational identifiers, and tags in one connected workspace.
+                        </p>
+                        <div className="flex flex-wrap items-center gap-2 pt-1">
+                            <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-600">
+                                {currentCompany.status}
+                            </span>
+                            {currentCompany.industry && (
+                                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-600">
+                                    {currentCompany.industry}
+                                </span>
+                            )}
+                            <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-600">
+                                {tagsCount} tags
+                            </span>
+                        </div>
+                    </div>
+
                     <button
-                        onClick={() => navigate('/companies')}
-                        className="flex items-center text-secondary-400 hover:text-secondary-200"
+                        onClick={() => navigate(`/companies/${currentCompany._id}/edit`)}
+                        className="btn btn-secondary"
                     >
-                        <ArrowLeft size={20} className="mr-2" />
-                        Back to Companies
+                        <Edit size={16} />
+                        Edit Company
                     </button>
                 </div>
+            </div>
 
-                <PageHeader
-                    title={currentCompany.name}
-                    subtitle={(
-                        <span className="text-secondary-300">
-                            {currentCompany.industry || 'No industry set'}
-                        </span>
-                    )}
-                    actions={(
-                        <button
-                            onClick={() => navigate(`/companies/${currentCompany._id}/edit`)}
-                            className="btn btn-primary"
-                        >
-                            <Edit size={18} />
-                            Edit Company
-                        </button>
-                    )}
-                />
-
-                <div className="mt-4 flex flex-wrap items-center gap-2">
-                    <span className={`status-pill ${currentCompany.status === 'Active' ? 'status-success' : 'status-neutral'}`}>
-                        {currentCompany.status}
-                    </span>
-                    {currentCompany.website && (
-                        <a
-                            href={currentCompany.website}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-xs text-primary-400 hover:text-primary-300"
-                        >
-                            {currentCompany.website}
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3 tt-animate-fade-up" style={{ animationDelay: '100ms' }}>
+                <div className="workspace-section px-5 py-4">
+                    <p className="mb-2 px-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Status</p>
+                    <div className="flex items-center gap-3">
+                        <span className={`h-3 w-3 rounded-full ${currentCompany.status === 'Active' ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`} />
+                        <span className="text-xl font-black uppercase tracking-tight text-slate-900">{currentCompany.status}</span>
+                    </div>
+                </div>
+                <div className="workspace-section px-5 py-4">
+                    <p className="mb-2 px-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Company size</p>
+                    <div className="text-xl font-black uppercase tracking-tight text-slate-900">
+                        {currentCompany.companySize || 'Unknown Size'}
+                    </div>
+                </div>
+                <div className="workspace-section px-5 py-4">
+                    <p className="mb-2 px-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Website</p>
+                    {currentCompany.website ? (
+                        <a href={currentCompany.website} target="_blank" rel="noreferrer" className="line-clamp-1 text-xl font-black text-sky-700 transition-colors hover:text-sky-600">
+                            {currentCompany.website.replace(/^https?:\/\//, '')}
                         </a>
-                    )}
+                    ) : <span className="text-xl font-black uppercase tracking-tight text-slate-300">None</span>}
+                </div>
+                <div className="workspace-section px-5 py-5 md:col-span-3 lg:hidden">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Tags</p>
+                            <p className="text-xl font-black uppercase tracking-tight text-slate-900">{tagsCount}</p>
+                        </div>
+                        <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                            {currentCompany.industry || 'General'}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 tt-animate-fade-up" style={{ animationDelay: '200ms' }}>
+                <div className="space-y-6">
+                    <WorkspaceSection
+                        title="Communication"
+                        description="Primary contact channels attached to this company record."
+                        eyebrow="Contact channels"
+                        aside={<><Building2 size={16} className="text-brand-500" /> Communication</>}
+                    >
+                        <div className="space-y-6">
+                            <div className="flex items-center gap-6">
+                                <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-indigo-100/50 bg-indigo-50 text-indigo-500">
+                                    <Mail size={18} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Email</p>
+                                    {currentCompany.email ? (
+                                        <a href={`mailto:${currentCompany.email}`} className="text-base font-bold text-slate-900 hover:text-indigo-600 transition-colors block truncate">
+                                            {currentCompany.email}
+                                        </a>
+                                    ) : <p className="text-base font-bold text-slate-300">Not added</p>}
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-6">
+                                <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-cyan-100/50 bg-cyan-50 text-cyan-500">
+                                    <Phone size={18} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Phone</p>
+                                    {currentCompany.phone ? (
+                                        <a href={`tel:${currentCompany.phone}`} className="text-base font-bold text-slate-900 hover:text-cyan-600 transition-colors block">
+                                            {currentCompany.phone}
+                                        </a>
+                                    ) : <p className="text-base font-bold text-slate-300">Not added</p>}
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-6">
+                                <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-emerald-100/50 bg-emerald-50 text-emerald-600">
+                                    <Globe size={18} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Website</p>
+                                    {currentCompany.website ? (
+                                        <a href={currentCompany.website} target="_blank" rel="noreferrer" className="block truncate text-base font-bold text-slate-900 transition-colors hover:text-emerald-600">
+                                            {currentCompany.website.replace(/^https?:\/\//, '')}
+                                        </a>
+                                    ) : <p className="text-base font-bold text-slate-300">Not added</p>}
+                                </div>
+                            </div>
+                        </div>
+                    </WorkspaceSection>
+
+                    <WorkspaceSection
+                        title="Address"
+                        description="Recorded mailing and operational address for documents and account records."
+                        eyebrow="Location"
+                    >
+                        <div className="space-y-1">
+                            <p className="text-lg font-black text-slate-900">{address.street || 'No street information recorded'}</p>
+                            <p className="text-base font-bold text-slate-500">
+                                {[address.city, address.state].filter(Boolean).join(', ') || 'No regional information'}
+                            </p>
+                            <p className="text-base font-bold text-slate-500">
+                                {[address.country, address.pinCode].filter(Boolean).join(' ') || 'No sovereign information'}
+                            </p>
+                        </div>
+                    </WorkspaceSection>
                 </div>
 
-                <SurfaceCard className="p-6 mt-6 space-y-6">
-                    <div className="flex items-center gap-3">
-                        <div className="p-3 bg-brand-500/10 rounded-lg">
-                            <Building2 className="text-brand-400" size={24} />
-                        </div>
-                        <div>
-                            <p className="text-secondary-400 text-sm">Industry</p>
-                            <p className="text-secondary-100">{currentCompany.industry || 'No industry set'}</p>
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                            <h2 className="text-sm font-semibold text-secondary-400 uppercase tracking-wider">Contact</h2>
-                            <div className="mt-2 text-secondary-100 space-y-1">
-                                {currentCompany.email ? (
-                                    <a className="text-primary-400 hover:text-primary-300" href={`mailto:${currentCompany.email}`}>
-                                        {currentCompany.email}
-                                    </a>
-                                ) : (
-                                    <p>No email</p>
-                                )}
-                                {currentCompany.phone ? (
-                                    <a className="text-secondary-100 hover:text-primary-400" href={`tel:${currentCompany.phone}`}>
-                                        {currentCompany.phone}
-                                    </a>
-                                ) : (
-                                    <p>No phone</p>
-                                )}
-                                {currentCompany.website ? (
-                                    <a className="text-primary-400 hover:text-primary-300" href={currentCompany.website} target="_blank" rel="noreferrer">
-                                        {currentCompany.website}
-                                    </a>
-                                ) : (
-                                    <p>No website</p>
-                                )}
-                            </div>
-                        </div>
-                        <div>
-                            <h2 className="text-sm font-semibold text-secondary-400 uppercase tracking-wider">Status</h2>
-                            <div className="mt-2">
-                                <span className={`status-pill ${currentCompany.status === 'Active' ? 'status-success' : 'status-neutral'}`}>
-                                    {currentCompany.status}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div>
-                        <h2 className="text-sm font-semibold text-secondary-400 uppercase tracking-wider">Address</h2>
-                        <div className="mt-2 text-secondary-100 space-y-1">
-                            <p>{address.street || 'No street address'}</p>
-                            <p>
-                                {[address.city, address.state].filter(Boolean).join(', ') || 'No city/state'}
-                            </p>
-                            <p>
-                                {[address.country, address.pinCode].filter(Boolean).join(' ') || 'No country/pin'}
-                            </p>
-                        </div>
-                    </div>
-
-                    <div>
-                        <h2 className="text-sm font-semibold text-secondary-400 uppercase tracking-wider">Business Details</h2>
-                        <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-4 text-secondary-100">
+                <div className="space-y-6">
+                    <WorkspaceSection
+                        title="Company identifiers"
+                        description="Business and compliance identifiers used for proposals, contracts, and invoicing."
+                        eyebrow="Identifiers"
+                    >
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                             <div>
-                                <p className="text-xs text-secondary-500">Company Size</p>
-                                <p>{currentCompany.companySize || '-'}</p>
+                                <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-500">GST</p>
+                                <p className="text-base font-black text-slate-900">{currentCompany.gst || 'Not registered'}</p>
                             </div>
                             <div>
-                                <p className="text-xs text-secondary-500">GST</p>
-                                <p>{currentCompany.gst || '-'}</p>
+                                <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-500">PAN</p>
+                                <p className="text-base font-black text-slate-900">{currentCompany.pan || 'Not registered'}</p>
                             </div>
-                            <div>
-                                <p className="text-xs text-secondary-500">PAN</p>
-                                <p>{currentCompany.pan || '-'}</p>
-                            </div>
-                            <div>
-                                <p className="text-xs text-secondary-500">Registration Number</p>
-                                <p>{currentCompany.registrationNumber || '-'}</p>
+                            <div className="md:col-span-2">
+                                <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-500">Registration number</p>
+                                <p className="text-base font-black text-slate-900">{currentCompany.registrationNumber || 'Not documented'}</p>
                             </div>
                         </div>
-                    </div>
+                    </WorkspaceSection>
 
-                    <div>
-                        <h2 className="text-sm font-semibold text-secondary-400 uppercase tracking-wider">Tags</h2>
-                        <div className="mt-2 text-secondary-100">
-                            {currentCompany.tags?.length
-                                ? currentCompany.tags.join(', ')
-                                : 'No tags'}
+                    <WorkspaceSection
+                        title="Tags"
+                        description="Lightweight classification labels for segmentation and reporting."
+                        eyebrow="Segmentation"
+                    >
+                        <div className="flex flex-wrap gap-2">
+                            {currentCompany.tags?.length ? (
+                                currentCompany.tags.map((tag, idx) => (
+                                    <span key={idx} className="rounded-xl border border-sky-100 bg-sky-50 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-sky-700">
+                                        {tag}
+                                    </span>
+                                ))
+                            ) : (
+                                <span className="text-[10px] font-black uppercase tracking-widest italic text-slate-300">No tags added</span>
+                            )}
                         </div>
-                    </div>
-                </SurfaceCard>
-            </PageLayout>
-        </MainLayout>
+                    </WorkspaceSection>
+                </div>
+            </div>
+        </div>
     );
 };
 

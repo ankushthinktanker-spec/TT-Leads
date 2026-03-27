@@ -16,7 +16,7 @@ const initialState: DashboardState = {
 
 export const fetchDashboardAnalytics = createAsyncThunk(
     'analytics/fetchDashboard',
-    async (params: Record<string, string | number> = {}, { rejectWithValue }) => {
+    async (params: Record<string, string | number | undefined> = {}, { rejectWithValue }) => {
         try {
             const response = await api.get('/analytics/dashboard', { params });
             return response.data.data;

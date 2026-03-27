@@ -11,7 +11,7 @@
     "audit": "npm run audit:backend && npm run audit:frontend",
     "ci:check": "npm run lint && npm run audit",
     "smoke:backend": "cd backend && npm run smoke",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"No root test suite configured yet\""
   },
   "keywords": [],
   "author": "",

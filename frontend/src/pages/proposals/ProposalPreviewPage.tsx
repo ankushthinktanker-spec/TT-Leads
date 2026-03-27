@@ -2,11 +2,11 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '../../hooks/redux';
 import { fetchProposalById, generateProposalPDF } from '../../store/slices/proposalSlice';
-import MainLayout from '../../components/layout/MainLayout';
 import PageLayout from '../../components/ui/PageLayout';
-import PageHeader from '../../components/ui/PageHeader';
 import Button from '../../components/ui/Button';
 import api from '../../api/axios';
+import WorkspaceSection from '../../components/ui/WorkspaceSection';
+import Badge from '../../components/ui/Badge';
 
 type PreviewMode = 'html' | 'pdf';
 
@@ -350,9 +350,9 @@ const ProposalPreviewPage = () => {
     }, [blocks, pages]);
 
     return (
-        <MainLayout>
-            <PageLayout className="flex flex-col min-h-full">
-                <div className="mb-4">
+        <>
+            <PageLayout className="flex min-h-full flex-col space-y-5 pb-20">
+                <div>
                     <Button
                         type="button"
                         variant="outline"
@@ -362,44 +362,89 @@ const ProposalPreviewPage = () => {
                     </Button>
                 </div>
 
-                <div>
-                    <PageHeader
-                        title="Proposal Preview"
-                        subtitle={currentProposal?.title
-                            ? `Review ${currentProposal.title} before sharing`
-                            : 'Review proposal layout and pagination before sharing'}
-                        actions={(
-                            <div className="surface-card-muted p-2 flex flex-wrap gap-2">
-                                <Button
-                                    type="button"
-                                    variant={mode === 'html' ? 'primary' : 'outline'}
-                                    onClick={() => setMode('html')}
-                                >
-                                    HTML Preview
-                                </Button>
-                                {mode === 'html' && (
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        onClick={() => setPaginationTick((tick) => tick + 1)}
-                                    >
-                                        Recalculate Pagination
-                                    </Button>
-                                )}
-                                <Button
-                                    type="button"
-                                    variant={mode === 'pdf' ? 'primary' : 'outline'}
-                                    onClick={() => setMode('pdf')}
-                                    disabled={loading}
-                                >
-                                    {loading ? 'Generating...' : 'PDF Preview'}
-                                </Button>
-                            </div>
+                <div className="workspace-hero flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                    <div>
+                        <div className="mb-2 flex items-center gap-3">
+                            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">
+                                Preview workspace
+                            </span>
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                                Review before export
+                            </span>
+                        </div>
+                        <h1 className="text-3xl font-black tracking-tight text-slate-950">Proposal Preview</h1>
+                        <p className="mt-2 max-w-2xl text-sm font-medium text-slate-600">
+                            {currentProposal?.title
+                                ? `Review ${currentProposal.title} before sharing or exporting.`
+                                : 'Review proposal layout and pagination before sharing.'}
+                        </p>
+                        <div className="mt-4 flex flex-wrap items-center gap-2">
+                            <Badge variant="neutral" className="px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em]">
+                                {(sections || []).length} sections
+                            </Badge>
+                            <Badge variant="neutral" className="px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em]">
+                                {tocEntries.length} toc entries
+                            </Badge>
+                            {currentProposal?.clientDetails?.companyName && (
+                                <Badge variant="success" className="px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em]">
+                                    {currentProposal.clientDetails.companyName}
+                                </Badge>
+                            )}
+                        </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                        <Button
+                            type="button"
+                            variant={mode === 'html' ? 'primary' : 'outline'}
+                            onClick={() => setMode('html')}
+                        >
+                            HTML Preview
+                        </Button>
+                        {mode === 'html' && (
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setPaginationTick((tick) => tick + 1)}
+                            >
+                                Recalculate Pagination
+                            </Button>
                         )}
-                    />
+                        <Button
+                            type="button"
+                            variant={mode === 'pdf' ? 'primary' : 'outline'}
+                            onClick={() => setMode('pdf')}
+                            disabled={loading}
+                        >
+                            {loading ? 'Generating...' : 'PDF Preview'}
+                        </Button>
+                    </div>
                 </div>
 
-                <div className="mt-6 preview-viewer">
+                <WorkspaceSection
+                    title="Preview output"
+                    description="Review the proposal as a client-facing document, validate pagination, and switch between HTML and generated PDF."
+                    eyebrow="Document review"
+                    aside={
+                        <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 p-1">
+                            <button
+                                type="button"
+                                onClick={() => setMode('html')}
+                                className={`rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] transition-colors ${mode === 'html' ? 'bg-brand-600 text-white' : 'text-slate-500 hover:text-slate-900'}`}
+                            >
+                                Html
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setMode('pdf')}
+                                className={`rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] transition-colors ${mode === 'pdf' ? 'bg-brand-600 text-white' : 'text-slate-500 hover:text-slate-900'}`}
+                            >
+                                Pdf
+                            </button>
+                        </div>
+                    }
+                    contentClassName="px-0 py-0"
+                >
+                <div className="preview-viewer border-0 bg-white shadow-none">
                     {mode === 'pdf' ? (
                         pdfUrl ? (
                             <div className="preview-scroll">
@@ -410,7 +455,7 @@ const ProposalPreviewPage = () => {
                                 />
                             </div>
                         ) : (
-                            <div className="surface-card-muted p-6 text-secondary-400">
+                            <div className="surface-card-muted p-6 text-slate-500">
                                 {loading ? 'Generating PDF preview...' : 'No PDF preview available yet.'}
                             </div>
                         )
@@ -419,10 +464,10 @@ const ProposalPreviewPage = () => {
                             <div className="preview-stack">
                                 <div className="preview-page">
                                     <div className="preview-content cover">
-                                {logoPreviewUrl && (
-                                    <img src={logoPreviewUrl} alt="Company Logo" className="cover-logo" />
-                                )}
-                                <div className="cover-title">{currentProposal?.title || 'Proposal'}</div>
+                                        {logoPreviewUrl && (
+                                            <img src={logoPreviewUrl} alt="Company Logo" className="cover-logo" />
+                                        )}
+                                        <div className="cover-title">{currentProposal?.title || 'Proposal'}</div>
                                         <div className="cover-subtitle">{currentProposal?.clientDetails?.companyName || ''}</div>
                                     </div>
                                     <div className="preview-footer">Page 1</div>
@@ -436,19 +481,19 @@ const ProposalPreviewPage = () => {
                                                 {tocEntries.map((entry, index) => (
                                                     <li
                                                         key={`${entry.id}-${index}`}
-                                                        className="flex gap-2 text-secondary-200 break-words"
+                                                        className="flex gap-2 text-slate-700 break-words"
                                                         style={{ marginLeft: `${(entry.level - 1) * 16}px` }}
                                                     >
-                                                        <span className="text-secondary-500">{index + 1}.</span>
+                                                        <span className="text-slate-900">{index + 1}.</span>
                                                         <span className="flex-1">{entry.title}</span>
-                                                        <span className="text-secondary-500">
+                                                        <span className="text-slate-900">
                                                             {headingPageMap.get(entry.id) ?? '-'}
                                                         </span>
                                                     </li>
                                                 ))}
                                             </ol>
                                         ) : (
-                                            <div className="text-secondary-500 text-sm">No headings available.</div>
+                                            <div className="text-slate-900 text-sm">No headings available.</div>
                                         )}
                                     </div>
                                     <div className="preview-footer">Page 2</div>
@@ -456,15 +501,15 @@ const ProposalPreviewPage = () => {
 
                                 {pages.map((pageBlocks, pageIndex) => (
                                     <div key={`page-${pageIndex}`} className="preview-page">
-                                        <div className="preview-content">
+                                        <div className="preview-content editor-content-view">
                                             {pageBlocks.map((blockIndex) => {
                                                 const block = blocks[blockIndex];
                                                 if (!block) return null;
                                                 if (block.type === 'title') {
                                                     return (
-                                                        <div key={block.key} className="section-title">
+                                                        <h2 key={block.key} className="section-title">
                                                             {block.text}
-                                                        </div>
+                                                        </h2>
                                                     );
                                                 }
                                                 return (
@@ -496,9 +541,72 @@ const ProposalPreviewPage = () => {
                         ))}
                     </div>
                 </div>
+                </WorkspaceSection>
             </PageLayout>
-        </MainLayout>
+        </>
     );
 };
 
 export default ProposalPreviewPage;
+
+const styles = `
+    .editor-content-view .section-title, .preview-measure .section-title {
+        font-size: 24pt;
+        font-weight: bold;
+        color: #1a202c;
+        margin-bottom: 20pt;
+        margin-top: 10pt;
+        line-height: 1.2;
+        border-bottom: 2px solid #edf2f7;
+        padding-bottom: 8pt;
+    }
+
+    .editor-content-view .section-content, .preview-measure .section-content {
+        font-size: 11pt;
+        line-height: 1.6;
+        color: #2d3748;
+    }
+
+    .editor-content-view table, .preview-measure table {
+        border-collapse: collapse;
+        width: 100%;
+        margin: 15pt 0;
+    }
+
+    .editor-content-view th, .preview-measure th,
+    .editor-content-view td, .preview-measure td {
+        border: 1px solid #e2e8f0;
+        padding: 8pt 12pt;
+        text-align: left;
+    }
+
+    .editor-content-view th, .preview-measure th {
+        background-color: #f8fafc;
+        font-weight: bold;
+    }
+
+    .editor-content-view ul, .preview-measure ul {
+        list-style-type: disc;
+        margin-left: 20pt;
+        margin-bottom: 12pt;
+    }
+
+    .editor-content-view ol, .preview-measure ol {
+        list-style-type: decimal;
+        margin-left: 20pt;
+        margin-bottom: 12pt;
+    }
+
+    .editor-content-view p, .preview-measure p {
+        margin-bottom: 10pt;
+    }
+`;
+
+// Inject styles
+if (typeof document !== 'undefined') {
+    const styleSheet = document.createElement("style");
+    styleSheet.innerText = styles;
+    document.head.appendChild(styleSheet);
+}
+
+

@@ -1,10 +1,13 @@
-﻿import { Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
 import Contact from '../models/contact.model';
 import Company from '../models/company.model';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { createContactSchema, updateContactSchema } from '../validators/contact.validator';
 import mongoose from 'mongoose';
+import { getPaginationParams, buildPaginationMeta } from '../utils/pagination';
+import { getSearchTerm, applySearchFilter } from '../utils/queryFilters';
+import { writeAuditLog } from '../services/audit.service';
 
 // @desc    Get all contacts
 // @route   GET /api/contacts
@@ -16,17 +19,14 @@ export const getContacts = async (
 ): Promise<void> => {
     try {
         const {
-            page = 1,
-            limit = 10,
             companyId,
-            search,
             status,
             sortBy = 'createdAt',
             sortOrder = 'desc'
         } = req.query;
 
-        // Build filter
-        const filter: Record<string, unknown> = {};
+        // Build filter - Critical Tenant Isolation
+        const filter: Record<string, unknown> = { tenantId: req.tenantId! };
 
         if (req.user!.role !== 'Admin' && req.user!.role !== 'Manager') {
             filter.createdBy = req.user!._id;
@@ -35,41 +35,33 @@ export const getContacts = async (
         if (companyId) filter.companyId = companyId;
         if (status) filter.status = status;
 
-        // Search
-        if (search) {
-            filter.$or = [
-                { firstName: { $regex: search, $options: 'i' } },
-                { lastName: { $regex: search, $options: 'i' } },
-                { email: { $regex: search, $options: 'i' } },
-                { phone: { $regex: search, $options: 'i' } }
-            ];
-        }
+        const searchTerm = getSearchTerm(req.query as Record<string, unknown>);
+        applySearchFilter(filter, searchTerm, ['firstName', 'lastName', 'email', 'phone']);
 
         // Pagination
-        const skip = (Number(page) - 1) * Number(limit);
+        const { page, limit, skip } = getPaginationParams(req.query as Record<string, unknown>);
         const sort: Record<string, 1 | -1> = {};
         sort[sortBy as string] = sortOrder === 'asc' ? 1 : -1;
 
         const contacts = await Contact.find(filter)
             .select('firstName lastName email phone jobTitle department status companyId createdBy createdAt')
-            .populate('companyId', 'name email phone')
+            .populate({
+                path: 'companyId',
+                match: { tenantId: req.tenantId! },
+                select: 'name email phone'
+            })
             .populate('createdBy', 'firstName lastName email')
             .sort(sort)
             .skip(skip)
-            .limit(Number(limit));
+            .limit(limit);
 
         const total = await Contact.countDocuments(filter);
 
         res.status(200).json({
             success: true,
             data: {
-                contacts,
-                pagination: {
-                    page: Number(page),
-                    limit: Number(limit),
-                    total,
-                    pages: Math.ceil(total / Number(limit))
-                }
+                items: contacts,
+                meta: buildPaginationMeta(page, limit, total)
             }
         });
     } catch (error) {
@@ -90,12 +82,16 @@ export const getContact = async (
             throw new AppError('Invalid contact identifier', 400);
         }
 
-        const contact = await Contact.findById(req.params.id)
-            .populate('companyId', 'name email phone website')
+        const contact = await Contact.findOne({ _id: req.params.id, tenantId: req.tenantId! })
+            .populate({
+                path: 'companyId',
+                match: { tenantId: req.tenantId! },
+                select: 'name email phone website'
+            })
             .populate('createdBy', 'firstName lastName email');
 
         if (!contact) {
-            throw new AppError('Contact not found', 404);
+            throw new AppError('Contact not found or unauthorized access', 404);
         }
 
         res.status(200).json({
@@ -121,14 +117,26 @@ export const createContact = async (
             throw new AppError(error.details[0].message, 400);
         }
 
-        const company = await Company.findById(value.companyId);
+        const company = await Company.findOne({ _id: value.companyId, tenantId: req.tenantId! });
         if (!company) {
-            throw new AppError('Company not found', 404);
+            throw new AppError('Company not found in reachable organization', 404);
         }
 
         const contact = await Contact.create({
             ...value,
+            tenantId: req.tenantId!,
             createdBy: req.user!._id
+        });
+
+        // 📍 SECURITY: Audit Log Creation
+        await writeAuditLog({
+            tenantId: req.tenantId!,
+            actorId: req.user!._id.toString(),
+            action: 'CREATE',
+            entityType: 'Contact',
+            entityId: contact._id.toString(),
+            ip: req.ip,
+            changes: contact.toObject() as any
         });
 
         res.status(201).json({
@@ -159,10 +167,12 @@ export const updateContact = async (
             throw new AppError(error.details[0].message, 400);
         }
 
-        const contact = await Contact.findById(req.params.id);
+        const contact = await Contact.findOne({ _id: req.params.id, tenantId: req.tenantId! });
         if (!contact) {
-            throw new AppError('Contact not found', 404);
+            throw new AppError('Contact not found or unauthorized access', 404);
         }
+
+        const beforeUpdate = contact.toObject();
 
         if (
             req.user!.role !== 'Admin' &&
@@ -173,19 +183,38 @@ export const updateContact = async (
         }
 
         if (value.companyId) {
-            const company = await Company.findById(value.companyId);
+            const company = await Company.findOne({ _id: value.companyId, tenantId: req.tenantId! });
             if (!company) {
-                throw new AppError('Company not found', 404);
+                throw new AppError('Company not found in reachable organization', 404);
             }
         }
 
-        const updatedContact = await Contact.findByIdAndUpdate(
-            req.params.id,
+        const updatedContact = await Contact.findOneAndUpdate(
+            { _id: req.params.id, tenantId: req.tenantId! },
             { $set: value },
             { new: true, runValidators: true }
         )
-            .populate('companyId', 'name email phone')
+            .populate({
+                path: 'companyId',
+                match: { tenantId: req.tenantId! },
+                select: 'name email phone'
+            })
             .populate('createdBy', 'firstName lastName email');
+
+        if (!updatedContact) {
+            throw new AppError('Update failed: Contact not found', 404);
+        }
+
+        // 📍 SECURITY: Audit Log Update
+        await writeAuditLog({
+            tenantId: req.tenantId!,
+            actorId: req.user!._id.toString(),
+            action: 'UPDATE',
+            entityType: 'Contact',
+            entityId: updatedContact._id.toString(),
+            ip: req.ip,
+            changes: { before: beforeUpdate as any, after: updatedContact.toObject() as any }
+        });
 
         res.status(200).json({
             success: true,
@@ -210,9 +239,9 @@ export const deleteContact = async (
             throw new AppError('Invalid contact identifier', 400);
         }
 
-        const contact = await Contact.findById(req.params.id);
+        const contact = await Contact.findOne({ _id: req.params.id, tenantId: req.tenantId! });
         if (!contact) {
-            throw new AppError('Contact not found', 404);
+            throw new AppError('Contact not found or unauthorized access', 404);
         }
 
         if (
@@ -222,6 +251,17 @@ export const deleteContact = async (
         ) {
             throw new AppError('Not authorized to delete this contact', 403);
         }
+
+        // 📍 SECURITY: Audit Log Delete
+        await writeAuditLog({
+            tenantId: req.tenantId!,
+            actorId: req.user!._id.toString(),
+            action: 'DELETE',
+            entityType: 'Contact',
+            entityId: contact._id.toString(),
+            ip: req.ip,
+            changes: contact.toObject() as any
+        });
 
         await contact.deleteOne();
 

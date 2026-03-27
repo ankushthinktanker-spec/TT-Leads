@@ -38,7 +38,7 @@ const User = mongoose.model('User', userSchema);
 async function createAdminUser() {
     try {
         const adminEmail = process.env.ADMIN_EMAIL || 'admin@example.com';
-        const adminPassword = process.env.ADMIN_PASSWORD || 'Admin@123';
+        const adminPassword = process.env.ADMIN_PASSWORD || 'Admin@12345';
 
         // Check if admin already exists
         const existingAdmin = await User.findOne({ email: adminEmail });
@@ -65,7 +65,7 @@ async function createAdminUser() {
 
         console.log('Admin user created successfully');
         console.log(`Email: ${admin.email}`);
-        console.log(`Password: ${adminPassword}`);
+        console.log(`Password: ${adminPassword} (min 10 chars required)`);
 
         process.exit(0);
     } catch (error) {

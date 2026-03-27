@@ -1,14 +1,15 @@
-﻿import { Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
 import path from 'path';
 import fs from 'fs/promises';
 import Proposal from '../models/proposal.model';
 import ProposalSection from '../models/proposal-section.model';
 import ProposalTemplate from '../models/proposal-template.model';
-import Company from '../models/company.model';
-import Lead from '../models/lead.model';
+import { proposalRepository } from '../repositories/proposal.repository';
+import { leadRepository } from '../repositories/lead.repository';
+import { companyRepository } from '../repositories/company.repository';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth.middleware';
-import { createProposalSchema, updateProposalSchema } from '../validators/proposal.validator';
+import { createProposalSchema, updateProposalSchema, sendProposalSchema } from '../validators/proposal.validator';
 import {
     createProposalSectionSchema,
     updateProposalSectionSchema,
@@ -16,6 +17,10 @@ import {
 } from '../validators/proposal-section.validator';
 import mongoose from 'mongoose';
 import sanitizeHtml from 'sanitize-html';
+import { getPaginationParams, buildPaginationMeta } from '../utils/pagination';
+import { getSearchTerm, applySearchFilter } from '../utils/queryFilters';
+import { scanFilePlaceholder } from '../utils/fileSecurity.utils';
+import { sendMail } from '../services/email.service';
 
 const normalizeSectionType = (contentType?: string): 'RichText' | 'Table' | 'Mixed' => {
     if (!contentType) return 'RichText';
@@ -24,8 +29,6 @@ const normalizeSectionType = (contentType?: string): 'RichText' | 'Table' | 'Mix
     if (normalized === 'mixed') return 'Mixed';
     return 'RichText';
 };
-
-const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const sanitizeSectionContent = (content: string): string => {
     if (!content) return '';
@@ -103,6 +106,7 @@ const mapSections = (sections: SectionInput[], proposalId: string) => {
 };
 
 const resolveCompanyId = async (
+    tenantId: string,
     payload: ProposalPayload,
     userId: string
 ): Promise<{ companyId?: string; clientCompanyName?: string }> => {
@@ -110,7 +114,7 @@ const resolveCompanyId = async (
     let clientCompanyName = payload.clientCompany || payload.clientDetails?.companyName;
 
     if (!companyId && payload.leadId) {
-        const lead = await Lead.findById(payload.leadId);
+        const lead = await leadRepository.findById(tenantId, payload.leadId);
         if (lead) {
             if (!clientCompanyName && lead.company) {
                 clientCompanyName = lead.company;
@@ -122,15 +126,14 @@ const resolveCompanyId = async (
     }
 
     if (!companyId && clientCompanyName) {
-        const existingCompany = await Company.findOne({
-            name: { $regex: new RegExp(`^${escapeRegExp(clientCompanyName)}$`, 'i') }
-        });
+        const existingCompany = await companyRepository.findByName(tenantId, clientCompanyName.trim());
+
         if (existingCompany) {
             companyId = existingCompany._id.toString();
         } else {
-            const newCompany = await Company.create({
+            const newCompany = await companyRepository.create(tenantId, {
                 name: clientCompanyName,
-                createdBy: userId
+                createdBy: new mongoose.Types.ObjectId(userId)
             });
             companyId = newCompany._id.toString();
         }
@@ -178,18 +181,15 @@ export const getProposals = async (
 ): Promise<void> => {
     try {
         const {
-            page = 1,
-            limit = 10,
             status,
             companyId,
             leadId,
-            search,
             sortBy = 'createdAt',
             sortOrder = 'desc'
         } = req.query;
 
         // Build filter
-        const filter: Record<string, unknown> = {};
+        const filter: Record<string, unknown> = { tenantId: req.tenantId! };
 
         if (req.user!.role !== 'Admin' && req.user!.role !== 'Manager') {
             filter.createdBy = req.user!._id;
@@ -199,42 +199,34 @@ export const getProposals = async (
         if (companyId) filter.companyId = companyId;
         if (leadId) filter.leadId = leadId;
 
-        // Search
-        if (search) {
-            filter.$or = [
-                { proposalNumber: { $regex: search, $options: 'i' } },
-                { title: { $regex: search, $options: 'i' } },
-                { 'clientDetails.companyName': { $regex: search, $options: 'i' } }
-            ];
-        }
+        const searchTerm = getSearchTerm(req.query as Record<string, unknown>);
+        applySearchFilter(filter, searchTerm, ['proposalNumber', 'title', 'clientDetails.companyName']);
 
         // Pagination
-        const skip = (Number(page) - 1) * Number(limit);
+        const { page, limit, skip } = getPaginationParams(req.query as Record<string, unknown>);
         const sort: Record<string, 1 | -1> = {};
         sort[sortBy as string] = sortOrder === 'asc' ? 1 : -1;
 
-        const proposals = await Proposal.find(filter)
-            .select('proposalNumber title status proposalDate validTill totalAmount currency companyId leadId contactId createdBy createdAt updatedAt generatedPdfPath')
-            .populate('companyId', 'name email phone')
-            .populate('leadId', 'firstName lastName email')
-            .populate('contactId', 'firstName lastName email')
-            .populate('createdBy', 'firstName lastName email')
-            .sort(sort)
-            .skip(skip)
-            .limit(Number(limit));
+        const proposals = await proposalRepository.find(req.tenantId!, filter, {
+            select: 'proposalNumber title status proposalDate validTill totalAmount currency companyId leadId contactId createdBy createdAt updatedAt generatedPdfPath',
+            populate: [
+                { path: 'companyId', select: 'name email phone' },
+                { path: 'leadId', select: 'firstName lastName email' },
+                { path: 'contactId', select: 'firstName lastName email' },
+                { path: 'createdBy', select: 'firstName lastName email' }
+            ],
+            sort,
+            skip,
+            limit
+        });
 
         const total = await Proposal.countDocuments(filter);
 
         res.status(200).json({
             success: true,
             data: {
-                proposals,
-                pagination: {
-                    page: Number(page),
-                    limit: Number(limit),
-                    total,
-                    pages: Math.ceil(total / Number(limit))
-                }
+                items: proposals,
+                meta: buildPaginationMeta(page, limit, total)
             }
         });
     } catch (error) {
@@ -255,7 +247,7 @@ export const getProposal = async (
             throw new AppError('Invalid proposal identifier', 400);
         }
 
-        const proposal = await Proposal.findById(req.params.id)
+        const proposal = await Proposal.findOne({ _id: req.params.id, tenantId: req.tenantId! })
             .populate('companyId')
             .populate('leadId')
             .populate('contactId')
@@ -263,7 +255,7 @@ export const getProposal = async (
             .populate('approvedBy', 'firstName lastName email');
 
         if (!proposal) {
-            throw new AppError('Proposal not found', 404);
+            throw new AppError('Proposal not found or unauthorized access', 404);
         }
 
         if (!canManageProposal(proposal, req.user!)) {
@@ -297,7 +289,7 @@ export const createProposal = async (
             throw new AppError(error.details[0].message, 400);
         }
 
-        const { companyId, clientCompanyName } = await resolveCompanyId(value, req.user!._id.toString());
+        const { companyId, clientCompanyName } = await resolveCompanyId(req.tenantId!, value, req.user!._id.toString());
         if (!companyId) {
             throw new AppError('Company is required for proposal', 400);
         }
@@ -314,6 +306,7 @@ export const createProposal = async (
         }
 
         const proposalData = {
+            tenantId: req.tenantId!,
             title: value.title,
             leadId: value.leadId,
             companyId,
@@ -368,12 +361,12 @@ export const createProposalFromTemplate = async (
             throw new AppError(error.details[0].message, 400);
         }
 
-        const template = await ProposalTemplate.findById(req.params.templateId);
+        const template = await ProposalTemplate.findOne({ _id: req.params.templateId, tenantId: req.tenantId! });
         if (!template) {
-            throw new AppError('Template not found', 404);
+            throw new AppError('Template not found or unauthorized access', 404);
         }
 
-        const { companyId, clientCompanyName } = await resolveCompanyId(value, req.user!._id.toString());
+        const { companyId, clientCompanyName } = await resolveCompanyId(req.tenantId!, value, req.user!._id.toString());
         if (!companyId) {
             throw new AppError('Company is required for proposal', 400);
         }
@@ -390,6 +383,7 @@ export const createProposalFromTemplate = async (
         }
 
         const proposalData = {
+            tenantId: req.tenantId!,
             title: value.title,
             leadId: value.leadId,
             companyId,
@@ -462,9 +456,9 @@ export const updateProposal = async (
             throw new AppError(error.details[0].message, 400);
         }
 
-        const proposal = await Proposal.findById(req.params.id);
+        const proposal = await Proposal.findOne({ _id: req.params.id, tenantId: req.tenantId! });
         if (!proposal) {
-            throw new AppError('Proposal not found', 404);
+            throw new AppError('Proposal not found or unauthorized access', 404);
         }
 
         if (!canManageProposal(proposal, req.user!)) {
@@ -517,14 +511,14 @@ export const updateProposal = async (
         }
 
         if ((value.leadId || value.clientCompany || value.clientDetails?.companyName) && !value.companyId) {
-            const { companyId } = await resolveCompanyId(value, req.user!._id.toString());
+            const { companyId } = await resolveCompanyId(req.tenantId!, value, req.user!._id.toString());
             if (companyId) {
                 updateData.companyId = companyId;
             }
         }
 
-        const updatedProposal = await Proposal.findByIdAndUpdate(
-            req.params.id,
+        const updatedProposal = await Proposal.findOneAndUpdate(
+            { _id: req.params.id, tenantId: req.tenantId! },
             { $set: updateData },
             { new: true, runValidators: true }
         );
@@ -560,9 +554,9 @@ export const deleteProposal = async (
             throw new AppError('Invalid proposal identifier', 400);
         }
 
-        const proposal = await Proposal.findById(req.params.id);
+        const proposal = await Proposal.findOne({ _id: req.params.id, tenantId: req.tenantId! });
         if (!proposal) {
-            throw new AppError('Proposal not found', 404);
+            throw new AppError('Proposal not found or unauthorized access', 404);
         }
 
         if (!canManageProposal(proposal, req.user!)) {
@@ -601,9 +595,9 @@ export const addSection = async (
             throw new AppError(error.details[0].message, 400);
         }
 
-        const proposal = await Proposal.findById(req.params.id);
+        const proposal = await Proposal.findOne({ _id: req.params.id, tenantId: req.tenantId! });
         if (!proposal) {
-            throw new AppError('Proposal not found', 404);
+            throw new AppError('Proposal not found or unauthorized access', 404);
         }
 
         if (!canManageProposal(proposal, req.user!)) {
@@ -624,7 +618,7 @@ export const addSection = async (
             sectionTitle,
             sectionType,
             sectionOrder,
-            content: ensureHeadingIds(value.content, localId),
+            content: ensureHeadingIds(sanitizeSectionContent(value.content || ''), localId),
             includeInIndex: value.includeInIndex ?? value.includeInTOC ?? true,
             isVisible: value.isVisible ?? true,
             localId
@@ -658,22 +652,18 @@ export const updateSection = async (
             throw new AppError(error.details[0].message, 400);
         }
 
-        const section = await ProposalSection.findById(req.params.sectionId);
-        if (!section) {
-            throw new AppError('Section not found', 404);
-        }
-
-        const proposal = await Proposal.findById(req.params.id);
+        const proposal = await Proposal.findOne({ _id: req.params.id, tenantId: req.tenantId! });
         if (!proposal) {
-            throw new AppError('Proposal not found', 404);
+            throw new AppError('Proposal not found or unauthorized access', 404);
         }
 
         if (!canManageProposal(proposal, req.user!)) {
             throw new AppError('Not authorized to modify this proposal', 403);
         }
 
-        if (section.proposalId.toString() !== req.params.id) {
-            throw new AppError('Section does not belong to this proposal', 400);
+        const section = await ProposalSection.findOne({ _id: req.params.sectionId, proposalId: req.params.id });
+        if (!section) {
+            throw new AppError('Section not found in this proposal', 404);
         }
 
         const updateData: Record<string, unknown> = {
@@ -725,22 +715,18 @@ export const deleteSection = async (
             throw new AppError('Invalid identifier', 400);
         }
 
-        const section = await ProposalSection.findById(req.params.sectionId);
-        if (!section) {
-            throw new AppError('Section not found', 404);
-        }
-
-        const proposal = await Proposal.findById(req.params.id);
+        const proposal = await Proposal.findOne({ _id: req.params.id, tenantId: req.tenantId! });
         if (!proposal) {
-            throw new AppError('Proposal not found', 404);
+            throw new AppError('Proposal not found or unauthorized access', 404);
         }
 
         if (!canManageProposal(proposal, req.user!)) {
             throw new AppError('Not authorized to modify this proposal', 403);
         }
 
-        if (section.proposalId.toString() !== req.params.id) {
-            throw new AppError('Section does not belong to this proposal', 400);
+        const section = await ProposalSection.findOne({ _id: req.params.sectionId, proposalId: req.params.id });
+        if (!section) {
+            throw new AppError('Section not found in this proposal', 404);
         }
 
         await section.deleteOne();
@@ -772,9 +758,9 @@ export const reorderSections = async (
             throw new AppError(error.details[0].message, 400);
         }
 
-        const proposal = await Proposal.findById(req.params.id);
+        const proposal = await Proposal.findOne({ _id: req.params.id, tenantId: req.tenantId! });
         if (!proposal) {
-            throw new AppError('Proposal not found', 404);
+            throw new AppError('Proposal not found or unauthorized access', 404);
         }
 
         if (!canManageProposal(proposal, req.user!)) {
@@ -788,9 +774,13 @@ export const reorderSections = async (
         }
 
         // Update each section's order
-        const updatePromises = sectionOrders.map(({ sectionId, newOrder }) =>
-            ProposalSection.findByIdAndUpdate(sectionId, { sectionOrder: newOrder })
-        );
+        const updatePromises = sectionOrders.map(async ({ sectionId, newOrder }) => {
+            const section = await ProposalSection.findOne({ _id: sectionId, proposalId: req.params.id });
+            if (!section) {
+                throw new AppError('Section does not belong to this proposal', 400);
+            }
+            return ProposalSection.findByIdAndUpdate(sectionId, { sectionOrder: newOrder });
+        });
 
         await Promise.all(updatePromises);
 
@@ -816,9 +806,9 @@ export const duplicateProposal = async (
             throw new AppError('Invalid proposal identifier', 400);
         }
 
-        const originalProposal = await Proposal.findById(req.params.id);
+        const originalProposal = await Proposal.findOne({ _id: req.params.id, tenantId: req.tenantId! });
         if (!originalProposal) {
-            throw new AppError('Proposal not found', 404);
+            throw new AppError('Proposal not found or unauthorized access', 404);
         }
 
         if (!canManageProposal(originalProposal, req.user!)) {
@@ -870,12 +860,12 @@ export const generatePDF = async (
             throw new AppError('Invalid proposal identifier', 400);
         }
 
-        const proposal = await Proposal.findById(req.params.id)
+        const proposal = await Proposal.findOne({ _id: req.params.id, tenantId: req.tenantId! })
             .populate('companyId')
             .populate('contactId');
 
         if (!proposal) {
-            throw new AppError('Proposal not found', 404);
+            throw new AppError('Proposal not found or unauthorized access', 404);
         }
 
         if (!canManageProposal(proposal, req.user!)) {
@@ -932,12 +922,12 @@ export const downloadPDF = async (
             throw new AppError('Invalid proposal identifier', 400);
         }
 
-        const proposal = await Proposal.findById(req.params.id)
+        const proposal = await Proposal.findOne({ _id: req.params.id, tenantId: req.tenantId! })
             .populate('companyId')
             .populate('contactId');
 
         if (!proposal) {
-            throw new AppError('Proposal not found', 404);
+            throw new AppError('Proposal not found or unauthorized access', 404);
         }
 
         if (!canManageProposal(proposal, req.user!)) {
@@ -991,12 +981,12 @@ export const streamPDF = async (
             throw new AppError('Invalid proposal identifier', 400);
         }
 
-        const proposal = await Proposal.findById(req.params.id)
+        const proposal = await Proposal.findOne({ _id: req.params.id, tenantId: req.tenantId! })
             .populate('companyId')
             .populate('contactId');
 
         if (!proposal) {
-            throw new AppError('Proposal not found', 404);
+            throw new AppError('Proposal not found or unauthorized access', 404);
         }
 
         if (!canManageProposal(proposal, req.user!)) {
@@ -1039,6 +1029,128 @@ export const streamPDF = async (
     }
 };
 
+// @desc    Send proposal by email
+// @route   POST /api/proposals/:id/send
+// @access  Private
+export const sendProposal = async (
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        if (!mongoose.isValidObjectId(req.params.id)) {
+            throw new AppError('Invalid proposal identifier', 400);
+        }
+
+        const { error, value } = sendProposalSchema.validate(req.body || {});
+        if (error) {
+            throw new AppError(error.details[0].message, 400);
+        }
+
+        const proposal = await Proposal.findOne({ _id: req.params.id, tenantId: req.tenantId! })
+            .populate('contactId', 'firstName lastName email')
+            .populate('leadId', 'firstName lastName email')
+            .populate('companyId', 'name');
+
+        if (!proposal) {
+            throw new AppError('Proposal not found or unauthorized access', 404);
+        }
+
+        if (!canManageProposal(proposal, req.user!)) {
+            throw new AppError('Not authorized to send this proposal', 403);
+        }
+
+        const requestedTo = typeof value.to === 'string' ? value.to.trim() : '';
+        const contactEmail = (proposal.contactId as { email?: string } | null)?.email || '';
+        const leadEmail = (proposal.leadId as { email?: string } | null)?.email || '';
+        const clientEmail = proposal.clientDetails?.email || '';
+        const recipient = requestedTo || clientEmail || contactEmail || leadEmail;
+
+        if (!recipient) {
+            throw new AppError('Recipient email is required to send proposal', 400);
+        }
+
+        const preparedByName = proposal.preparedBy?.name || `${req.user!.firstName} ${req.user!.lastName}`;
+        const companyName = proposal.clientDetails?.companyName
+            || (proposal.companyId as { name?: string } | null)?.name
+            || 'Client';
+        const defaultSubject = `Proposal ${proposal.proposalNumber} from ${preparedByName}`;
+        const messageText = typeof value.message === 'string' && value.message.trim()
+            ? value.message.trim()
+            : `Please find the proposal ${proposal.proposalNumber} for ${companyName}.`;
+
+        const safeMessage = sanitizeHtml(messageText, {
+            allowedTags: [],
+            allowedAttributes: {}
+        });
+
+        let pdfPath = proposal.generatedPdfPath;
+        if (!pdfPath) {
+            const sections = await ProposalSection.find({ proposalId: req.params.id })
+                .sort({ sectionOrder: 1 });
+            const { PDFService } = await import('../services/pdf.service');
+            pdfPath = await PDFService.generateProposalPDF({
+                proposal,
+                sections
+            });
+            proposal.generatedPdfPath = pdfPath;
+            proposal.lastGeneratedAt = new Date();
+            try {
+                const generatedAbsolutePath = path.resolve(__dirname, '../../', pdfPath.replace(/^\//, ''));
+                const stats = await fs.stat(generatedAbsolutePath);
+                proposal.generatedPdfSize = stats.size;
+            } catch {
+                proposal.generatedPdfSize = undefined;
+            }
+        }
+
+        if (!pdfPath) {
+            throw new AppError('PDF not available for sending', 500);
+        }
+
+        const absolutePdfPath = path.resolve(__dirname, '../../', pdfPath.replace(/^\//, ''));
+        await fs.access(absolutePdfPath);
+
+        const htmlBody = [
+            `<p>Hello,</p>`,
+            `<p>${safeMessage}</p>`,
+            `<p><strong>Proposal:</strong> ${proposal.title}</p>`,
+            `<p><strong>Proposal Number:</strong> ${proposal.proposalNumber}</p>`,
+            `<p><strong>Valid Till:</strong> ${new Date(proposal.validTill).toLocaleDateString()}</p>`,
+            `<p>Regards,<br/>${preparedByName}</p>`
+        ].join('');
+
+        await sendMail({
+            to: recipient,
+            subject: (typeof value.subject === 'string' && value.subject.trim()) ? value.subject.trim() : defaultSubject,
+            html: htmlBody,
+            text: `${messageText}\n\nProposal: ${proposal.title}\nProposal Number: ${proposal.proposalNumber}`,
+            replyTo: req.user!.email,
+            attachments: [
+                {
+                    filename: `${proposal.proposalNumber}.pdf`,
+                    path: absolutePdfPath,
+                    contentType: 'application/pdf'
+                }
+            ]
+        });
+
+        proposal.status = 'Sent';
+        await proposal.save();
+
+        res.status(200).json({
+            success: true,
+            message: 'Proposal sent successfully',
+            data: {
+                proposal,
+                sentTo: recipient
+            }
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
 // @desc    Stream proposal logo
 // @route   GET /api/proposals/logo/:fileName
 // @access  Private
@@ -1073,6 +1185,9 @@ export const uploadProposalLogo = async (
         if (!req.file) {
             throw new AppError('Logo file is required', 400);
         }
+
+        const absolutePath = path.resolve(__dirname, '../../uploads/logos', req.file.filename);
+        await scanFilePlaceholder(absolutePath);
 
         const filePath = `/uploads/logos/${req.file.filename}`;
 

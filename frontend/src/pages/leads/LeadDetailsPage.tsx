@@ -1,320 +1,437 @@
-import { useEffect, useState } from 'react';
-import { useDispatch, useSelector } from 'react-redux';
-import { useParams, Link, useNavigate } from 'react-router-dom';
-import { AppDispatch, RootState } from '../../store';
-import { fetchLead, deleteLead, clearCurrentLead, updateLeadStatus } from '../../store/slices/leadSlice';
-import MainLayout from '../../components/layout/MainLayout';
-import LeadActivityTimeline from '../../components/leads/LeadActivityTimeline';
-import { Edit, Trash2, ArrowLeft, Phone, Mail, Building, Calendar } from 'lucide-react';
-import LeadStatusBadge from '../../components/leads/LeadStatusBadge';
-import LeadHealthBadge from '../../components/leads/LeadHealthBadge';
-import { LEAD_STATUS_OPTIONS } from '../../lib/utils';
-import LostReasonModal from '../../components/leads/LostReasonModal';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { Building2, Clock3, Mail, Phone, Trash2, Plus } from 'lucide-react';
+import { useAppDispatch, useAppSelector } from '../../hooks/redux';
+import { fetchLead, clearCurrentLead, deleteLead, addLeadNote } from '../../store/slices/leadSlice';
+import { fetchProposals } from '../../store/slices/proposalSlice';
 import PageLayout from '../../components/ui/PageLayout';
-import PageHeader from '../../components/ui/PageHeader';
-import SurfaceCard from '../../components/ui/SurfaceCard';
+import Button from '../../components/ui/Button';
+import Badge from '../../components/ui/Badge';
+import Skeleton from '../../components/ui/Skeleton';
+import InlineError from '../../components/ui/InlineError';
+import Tabs, { TabItem, TabPanel } from '../../components/ui/Tabs';
+import Breadcrumb from '../../components/ui/Breadcrumb';
+import LeadActivityTimeline from '../../components/leads/LeadActivityTimeline';
+import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import { ROUTES } from '../../routes';
+import { showToast } from '../../utils/toast';
+import WorkspaceSection from '../../components/ui/WorkspaceSection';
+
+const statusVariant = (status: string): 'neutral' | 'success' | 'warning' | 'danger' => {
+    if (status === 'Won' || status === 'Qualified') return 'success';
+    if (status === 'Lost') return 'danger';
+    if (status === 'Proposal Sent' || status === 'Contacted') return 'warning';
+    return 'neutral';
+};
+
+const formatDateTime = (value?: string) => {
+    if (!value) return '-';
+    return new Date(value).toLocaleString('en-US', {
+        month: 'short',
+        day: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+};
 
 export const LeadDetailsPage = () => {
     const { id } = useParams<{ id: string }>();
-    const dispatch = useDispatch<AppDispatch>();
     const navigate = useNavigate();
-    const { lead, loading, error } = useSelector((state: RootState) => state.leads);
-    const [statusValue, setStatusValue] = useState('New');
-    const [lostReason, setLostReason] = useState('');
-    const [statusError, setStatusError] = useState<string | null>(null);
-    const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
-    const [lostReasonModalOpen, setLostReasonModalOpen] = useState(false);
+    const dispatch = useAppDispatch();
+
+    const { lead, loading, error } = useAppSelector((state) => state.leads);
+    const { proposals } = useAppSelector((state) => state.proposals);
+
+    const [activeTab, setActiveTab] = useState('overview');
+    const [noteText, setNoteText] = useState('');
+    const [deleteOpen, setDeleteOpen] = useState(false);
 
     useEffect(() => {
-        if (id) {
-            dispatch(fetchLead(id));
-        }
+        if (!id) return;
+        dispatch(fetchLead(id));
+        dispatch(fetchProposals({ leadId: id, limit: 10, page: 1, sortBy: 'createdAt', sortOrder: 'desc' }));
         return () => {
             dispatch(clearCurrentLead());
         };
     }, [dispatch, id]);
 
-    useEffect(() => {
-        if (lead) {
-            setStatusValue(lead.status || 'New');
-            setLostReason(lead.lostReason || '');
-        }
-    }, [lead]);
+    const proposalCount = useMemo(() => proposals.filter((proposal) => proposal.leadId === id).length, [proposals, id]);
+
+    const tabs: TabItem[] = [
+        { id: 'overview', label: 'Overview' },
+        { id: 'activity', label: 'Activity / Timeline' },
+        { id: 'notes', label: 'Notes' },
+        { id: 'proposals', label: 'Proposals', badge: proposalCount }
+    ];
 
     const handleDelete = async () => {
-        if (window.confirm('Are you sure you want to delete this lead?')) {
-            if (id) {
-                await dispatch(deleteLead(id));
-                navigate('/leads');
-            }
-        }
+        if (!id) return;
+        await dispatch(deleteLead(id));
+        showToast('Lead deleted.', 'success');
+        navigate(ROUTES.leads);
     };
 
-    const handleStatusUpdate = async () => {
-        if (!id) return;
-        if (statusValue === 'Lost' && !lostReason.trim()) {
-            setStatusError('Lost reason is required.');
-            setLostReasonModalOpen(true);
-            return;
-        }
-
+    const handleAddNote = async () => {
+        if (!id || !noteText.trim()) return;
         try {
-            setIsUpdatingStatus(true);
-            setStatusError(null);
-            await dispatch(updateLeadStatus({ id, status: statusValue, lostReason })).unwrap();
-        } catch (updateError) {
-            setStatusError(typeof updateError === 'string' ? updateError : 'Failed to update status.');
-        } finally {
-            setIsUpdatingStatus(false);
-        }
-    };
-
-    const handleConfirmLostReason = async (reason: string) => {
-        if (!id) return;
-        try {
-            setIsUpdatingStatus(true);
-            setStatusError(null);
-            setLostReason(reason);
-            await dispatch(updateLeadStatus({ id, status: statusValue, lostReason: reason })).unwrap();
-        } catch (updateError) {
-            setStatusError(typeof updateError === 'string' ? updateError : 'Failed to update status.');
-        } finally {
-            setIsUpdatingStatus(false);
-            setLostReasonModalOpen(false);
+            await dispatch(addLeadNote({ id, note: noteText.trim() })).unwrap();
+            showToast('Note added to timeline.', 'success');
+            setNoteText('');
+        } catch {
+            showToast('Unable to add note. Try again.', 'error');
         }
     };
 
     if (loading) {
         return (
-            <MainLayout>
-                <PageLayout>
-                    <div className="flex items-center justify-center min-h-[50vh] text-secondary-500">
-                        Loading lead details...
-                    </div>
-                </PageLayout>
-            </MainLayout>
+            <PageLayout className="space-y-4">
+                <Skeleton className="h-24 w-full" />
+                <Skeleton className="h-80 w-full" />
+            </PageLayout>
         );
     }
 
     if (error || !lead) {
         return (
-            <MainLayout>
-                <PageLayout>
-                    <div className="flex flex-col items-center justify-center min-h-[50vh]">
-                        <div className="text-red-400 mb-4">Error: {error || 'Lead not found'}</div>
-                        <Link to="/leads" className="btn btn-outline">Back to Leads</Link>
-                    </div>
-                </PageLayout>
-            </MainLayout>
+            <PageLayout>
+                <InlineError message={error || 'Lead not found'} onRetry={() => id && dispatch(fetchLead(id))} />
+            </PageLayout>
         );
     }
 
+    const ownerName = typeof lead.ownerId === 'object'
+        ? `${lead.ownerId.firstName || ''} ${lead.ownerId.lastName || ''}`.trim()
+        : 'Unassigned';
+
+    const leadProposals = proposals.filter((proposal) => proposal.leadId === lead._id);
+    const nextFollowUpLabel = lead.nextFollowUpDate ? formatDateTime(lead.nextFollowUpDate) : 'No follow-up set';
+
     return (
-        <MainLayout>
-            <PageLayout>
-                <div className="mb-4">
-                    <Link to="/leads" className="text-secondary-400 hover:text-secondary-200 flex items-center gap-1">
-                        <ArrowLeft className="w-4 h-4" />
-                        Back to Leads
-                    </Link>
-                </div>
-
-                <PageHeader
-                    title={`${lead.firstName} ${lead.lastName}`}
-                    subtitle={(
-                        <span className="flex items-center gap-2 text-secondary-300">
-                            <Building className="w-4 h-4" />
-                            {lead.company}
-                        </span>
-                    )}
-                    actions={(
-                        <div className="flex gap-3">
-                            <Link to={`/leads/${lead._id}/edit`} className="btn btn-outline flex items-center gap-2">
-                                <Edit className="w-4 h-4" />
-                                Edit
-                            </Link>
-                            <button onClick={handleDelete} className="btn btn-danger flex items-center gap-2">
-                                <Trash2 className="w-4 h-4" />
-                                Delete
-                            </button>
-                        </div>
-                    )}
-                />
-
-                <div className="flex flex-wrap items-center gap-2 mt-4">
-                    <LeadStatusBadge status={lead.status} className="text-sm" />
-                    <LeadHealthBadge lead={lead} className="text-sm" />
-                    <span className={`status-pill ${
-                        lead.priority === 'Hot' ? 'status-danger' :
-                            lead.priority === 'Warm' ? 'status-warning' :
-                                'status-neutral'
-                        }`}>
-                        {lead.priority}
-                    </span>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
-                    {/* Main Info */}
-                    <div className="lg:col-span-2 space-y-6">
-                        <SurfaceCard className="p-6">
-                            <h2 className="text-xl font-semibold text-secondary-50 mb-4">Contact Information</h2>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="flex items-start gap-3">
-                                    <Mail className="w-5 h-5 text-secondary-400 mt-0.5" />
-                                    <div>
-                                        <p className="text-sm font-medium text-secondary-400">Email</p>
-                                        <a href={`mailto:${lead.email}`} className="text-primary-400 hover:underline">{lead.email}</a>
-                                    </div>
+        <div className="page-layout workspace-stack">
+            <div className="flex flex-col gap-6">
+                <Breadcrumb items={[{ label: 'Dashboard', to: ROUTES.dashboard }, { label: 'Leads', to: ROUTES.leads }, { label: `${lead.firstName} ${lead.lastName}` }]} />
+                
+                <div className="tt-animate-fade-up">
+                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                            <div className="flex items-center gap-8">
+                            <div className="relative group">
+                                <div className="relative flex h-20 w-20 items-center justify-center rounded-[24px] bg-white text-3xl font-black text-slate-900 shadow-[0_12px_28px_rgba(15,23,42,0.08)] ring-1 ring-slate-200 transition-all duration-500">
+                                    {lead.firstName?.[0]}{lead.lastName?.[0]}
                                 </div>
-                                <div className="flex items-start gap-3">
-                                    <Phone className="w-5 h-5 text-secondary-400 mt-0.5" />
-                                    <div>
-                                        <p className="text-sm font-medium text-secondary-400">Phone</p>
-                                        <a href={`tel:${lead.phone}`} className="text-secondary-100 hover:text-primary-400">{lead.phone}</a>
-                                    </div>
+                                <div className="absolute -bottom-2 -right-2 flex h-8 w-8 items-center justify-center rounded-full border-4 border-white bg-emerald-500 shadow-lg">
+                                    <div className="h-2 w-2 rounded-full bg-white animate-pulse" />
                                 </div>
                             </div>
-                        </SurfaceCard>
 
-                        <SurfaceCard className="p-6">
-                            <h2 className="text-xl font-semibold text-secondary-50 mb-4">Lead Details</h2>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div>
-                                    <p className="text-sm font-medium text-secondary-400">Status</p>
-                                    <LeadStatusBadge status={lead.status} className="text-sm mt-1" />
+                            <div className="space-y-3">
+                                <div className="flex items-center gap-3">
+                                    <span className="rounded-full border border-brand-200 bg-brand-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-brand-700">
+                                        Lead record
+                                    </span>
+                                    <span className="h-px w-8 bg-slate-300" />
+                                    <Badge variant={statusVariant(lead.status)} className="shadow-sm py-1 px-3 text-[9px] font-black uppercase tracking-wider">
+                                        {lead.status}
+                                    </Badge>
                                 </div>
-                                <div>
-                                    <p className="text-sm font-medium text-secondary-400">Lead Health</p>
-                                    <LeadHealthBadge lead={lead} className="mt-1" />
-                                </div>
-                                <div>
-                                    <p className="text-sm font-medium text-secondary-400">Priority</p>
-                                    <span className={`status-pill mt-1 ${
-                                        lead.priority === 'Hot' ? 'status-danger' :
-                                            lead.priority === 'Warm' ? 'status-warning' :
-                                                'status-neutral'
-                                        }`}>
-                                        {lead.priority}
+                                <h1 className="text-3xl font-black tracking-tight leading-none text-slate-950">
+                                    {lead.firstName} <span className="text-brand-600">{lead.lastName}</span>
+                                </h1>
+                                <div className="flex flex-wrap items-center gap-6 text-sm font-bold text-slate-500">
+                                    <span className="flex items-center gap-2">
+                                        <Building2 size={16} className="text-brand-600" />
+                                        {lead.company || 'No company linked'}
+                                    </span>
+                                    <span className="flex items-center gap-2">
+                                        <span className="h-1 w-1 rounded-full bg-slate-400" />
+                                        Source: {lead.source || 'Direct'}
                                     </span>
                                 </div>
-                                <div>
-                                    <p className="text-sm font-medium text-secondary-400">Source</p>
-                                    <p className="text-secondary-100 mt-1">{lead.source}</p>
-                                </div>
-                                <div>
-                                    <p className="text-sm font-medium text-secondary-400">Lead Number</p>
-                                    <p className="text-secondary-100 mt-1 font-mono">{lead.leadNumber}</p>
-                                </div>
-                                <div>
-                                    <p className="text-sm font-medium text-secondary-400">Owner</p>
-                                    <p className="text-secondary-100 mt-1">
-                                        {lead.ownerId && typeof lead.ownerId === 'object'
-                                            ? `${lead.ownerId.firstName || ''} ${lead.ownerId.lastName || ''}`.trim()
-                                            : lead.assignedTo
-                                                ? `${lead.assignedTo.firstName} ${lead.assignedTo.lastName}`
-                                                : 'Unassigned'}
-                                    </p>
-                                </div>
-                                <div>
-                                    <p className="text-sm font-medium text-secondary-400">Next Follow-up</p>
-                                    <p className="text-secondary-100 mt-1">
-                                        {lead.nextFollowUpDate
-                                            ? new Date(lead.nextFollowUpDate).toLocaleString()
-                                            : 'Not scheduled'}
-                                    </p>
-                                </div>
-                                <div>
-                                    <p className="text-sm font-medium text-secondary-400">Follow-up Type</p>
-                                    <p className="text-secondary-100 mt-1">{lead.followUpType || 'Not set'}</p>
-                                </div>
                             </div>
-                        </SurfaceCard>
+                        </div>
 
-                        <SurfaceCard className="p-6">
-                            <h2 className="text-xl font-semibold text-secondary-50 mb-4">Update Status</h2>
-                            {statusError && (
-                                <div className="alert-error mb-4">
-                                    {statusError}
-                                </div>
-                            )}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="form-label">Status</label>
-                                    <select
-                                        value={statusValue}
-                                        onChange={(e) => {
-                                            setStatusValue(e.target.value);
-                                            if (e.target.value !== 'Lost') {
-                                                setLostReason('');
-                                            }
-                                        }}
-                                        className="input"
-                                    >
-                                        {LEAD_STATUS_OPTIONS.map((status) => (
-                                            <option key={status} value={status}>
-                                                {status}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
-                            </div>
-                            <div className="mt-4 flex justify-end">
-                                <button
-                                    type="button"
-                                    onClick={handleStatusUpdate}
-                                    disabled={isUpdatingStatus}
-                                    className="btn btn-primary"
-                                >
-                                    {isUpdatingStatus ? 'Updating...' : 'Update Status'}
-                                </button>
-                            </div>
-                        </SurfaceCard>
-
-                        {/* Lead Activity Timeline */}
-                        {id && (
-                            <SurfaceCard className="p-6">
-                                <div className="mb-4">
-                                    <h2 className="text-xl font-semibold text-secondary-50">Activity Timeline</h2>
-                                    <p className="text-sm text-secondary-400 mt-1">
-                                        Notes, stage changes, and follow-up updates for this lead.
-                                    </p>
-                                </div>
-                                <LeadActivityTimeline leadId={id} />
-                            </SurfaceCard>
-                        )}
-                    </div>
-
-                    {/* Sidebar Info */}
-                    <div className="space-y-6">
-                        <SurfaceCard className="p-6">
-                            <h2 className="text-lg font-semibold text-secondary-50 mb-4">System Info</h2>
-                            <div className="space-y-4">
-                                <div>
-                                    <p className="text-sm font-medium text-secondary-400">Created At</p>
-                                    <p className="text-secondary-100 text-sm flex items-center gap-2 mt-1">
-                                        <Calendar className="w-4 h-4 text-secondary-400" />
-                                        {new Date(lead.createdAt).toLocaleDateString()}
-                                    </p>
-                                </div>
-                                <div>
-                                    <p className="text-sm font-medium text-secondary-400">Last Updated</p>
-                                    <p className="text-secondary-100 text-sm flex items-center gap-2 mt-1">
-                                        <Calendar className="w-4 h-4 text-secondary-400" />
-                                        {new Date(lead.updatedAt).toLocaleDateString()}
-                                    </p>
-                                </div>
-                            </div>
-                        </SurfaceCard>
+                        <div className="flex flex-wrap items-center gap-4">
+                            <button
+                                onClick={() => navigate(`${ROUTES.leads}/${lead._id}/edit`)}
+                                className="btn btn-secondary"
+                            >
+                                Edit lead
+                            </button>
+                            <button
+                                onClick={() => navigate(`${ROUTES.proposals}/new?leadId=${lead._id}`)}
+                                className="btn btn-primary"
+                            >
+                                Create proposal
+                            </button>
+                            <button 
+                                onClick={() => setDeleteOpen(true)}
+                                className="px-3 py-3 rounded-2xl text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-all"
+                            >
+                                <Trash2 size={20} />
+                            </button>
+                        </div>
                     </div>
                 </div>
-            </PageLayout>
+            </div>
 
-            <LostReasonModal
-                isOpen={lostReasonModalOpen}
-                onClose={() => setLostReasonModalOpen(false)}
-                onConfirm={handleConfirmLostReason}
-                initialReason={lostReason}
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                <div className="workspace-section px-4 py-4">
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Status</p>
+                    <div className="mt-2 flex items-center justify-between">
+                        <Badge variant={statusVariant(lead.status)} className="rounded-xl px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em]">
+                            {lead.status}
+                        </Badge>
+                        <span className="text-xs font-semibold text-slate-500">{lead.source || 'Direct'}</span>
+                    </div>
+                </div>
+                <div className="workspace-section px-4 py-4">
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Owner</p>
+                    <div className="mt-2 flex items-center gap-3">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-[10px] font-black text-slate-900">
+                            {ownerName?.[0] || 'U'}
+                        </div>
+                        <div>
+                            <p className="text-sm font-bold text-slate-900">{ownerName || 'Unassigned'}</p>
+                            <p className="text-[11px] text-slate-500">Record accountability</p>
+                        </div>
+                    </div>
+                </div>
+                <div className="workspace-section px-4 py-4">
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Next follow-up</p>
+                    <div className="mt-2">
+                        <p className="text-sm font-bold text-slate-900">{nextFollowUpLabel}</p>
+                        <p className="text-[11px] text-slate-500">Pipeline next action</p>
+                    </div>
+                </div>
+            </div>
+
+            <div className="workspace-sheet">
+                <div className="overflow-hidden">
+                    <div className="border-b border-slate-100 bg-slate-50/50 px-8 pt-4">
+                        <div className="flex items-center justify-between pb-1">
+                            <Tabs tabs={tabs} value={activeTab} onChange={setActiveTab} />
+                            <div className="hidden lg:flex items-center gap-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                <Clock3 size={14} className="text-indigo-500" />
+                                Sync Active: {formatDateTime(lead.updatedAt)}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="p-10">
+                        {activeTab === 'overview' && (
+                            <TabPanel>
+                                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                                    <WorkspaceSection
+                                        title="Communication"
+                                        description="Primary contact channels for direct outreach."
+                                        eyebrow="Contact channels"
+                                        contentClassName="py-6"
+                                    >
+                                        <div className="space-y-6">
+                                            <div className="flex items-center gap-5">
+                                                <div className="h-12 w-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shadow-sm">
+                                                    <Mail size={20} />
+                                                </div>
+                                                <div>
+                                                    <p className="text-[10px] uppercase font-black text-slate-400 tracking-tighter">Email</p>
+                                                    <p className="text-sm font-black text-slate-900 tracking-tight group-hover:text-indigo-600 transition-colors uppercase truncate">
+                                                        {lead.email || 'Not added'}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-5">
+                                                <div className="h-12 w-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shadow-sm">
+                                                    <Phone size={20} />
+                                                </div>
+                                                <div>
+                                                    <p className="text-[10px] uppercase font-black text-slate-400 tracking-tighter">Phone</p>
+                                                    <p className="text-sm font-black text-slate-900 tracking-tight group-hover:text-blue-600 transition-colors">
+                                                        {lead.phone || 'Not added'}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </WorkspaceSection>
+
+                                    <WorkspaceSection
+                                        title="Lead details"
+                                        description="Source, priority, and next follow-up context."
+                                        eyebrow="Qualification"
+                                        contentClassName="py-6"
+                                    >
+                                        <div className="space-y-6">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-xs font-bold tracking-tight text-slate-500">Source</span>
+                                                <span className="text-xs font-black text-slate-900 uppercase tracking-widest">{lead.source || 'Organic'}</span>
+                                            </div>
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-xs font-bold tracking-tight text-slate-500">Priority</span>
+                                                <Badge 
+                                                    variant={lead.priority === 'Hot' ? 'danger' : lead.priority === 'Warm' ? 'warning' : 'neutral'} 
+                                                    className="shadow-sm py-1 px-3 text-[10px] font-black uppercase"
+                                                >
+                                                    {lead.priority || 'Cold'}
+                                                </Badge>
+                                            </div>
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-xs font-bold tracking-tight text-slate-500">Next follow-up</span>
+                                                    <span className="text-xs font-black text-brand-700">{formatDateTime(lead.nextFollowUpDate)}</span>
+                                            </div>
+                                        </div>
+                                    </WorkspaceSection>
+
+                                    <WorkspaceSection
+                                        title="Ownership"
+                                        description="Assigned owner and record timing details."
+                                        eyebrow="Accountability"
+                                        contentClassName="py-6"
+                                    >
+                                        <div className="space-y-6">
+                                            <div className="space-y-2">
+                                                <p className="text-[10px] uppercase font-black tracking-tighter text-slate-400">Owner</p>
+                                                <div className="flex items-center gap-3">
+                                                    <div className="h-8 w-8 rounded-full bg-white border border-slate-200 flex items-center justify-center text-[10px] font-black text-slate-900">
+                                                        {ownerName?.[0]}
+                                                    </div>
+                                                    <p className="text-sm font-black text-slate-900 tracking-tight">{ownerName}</p>
+                                                </div>
+                                            </div>
+                                            <div className="pt-4 border-t border-slate-200 space-y-4">
+                                                <div className="flex items-center gap-3 text-[10px] font-bold text-slate-500">
+                                                    <Clock3 size={14} className="text-slate-400" />
+                                                    Created: {formatDateTime(lead.createdAt)}
+                                                </div>
+                                                <div className="flex items-center gap-3 text-[10px] font-bold text-slate-500">
+                                                    <Clock3 size={14} className="text-slate-400" />
+                                                    Updated: {formatDateTime(lead.updatedAt)}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </WorkspaceSection>
+                                </div>
+                            </TabPanel>
+                        )}
+
+                        {activeTab === 'activity' && (
+                            <TabPanel>
+                                <div className="max-w-4xl mx-auto">
+                                    <LeadActivityTimeline leadId={lead._id} />
+                                </div>
+                            </TabPanel>
+                        )}
+
+                        {activeTab === 'notes' && (
+                            <TabPanel>
+                                <div className="max-w-3xl mx-auto space-y-8">
+                                    <div className="space-y-2">
+                                        <h3 className="text-2xl font-black tracking-tight text-slate-900">Notes</h3>
+                                        <p className="text-sm font-medium text-slate-500">Add sales context, conversation summaries, and internal follow-up notes.</p>
+                                    </div>
+                                    <div className="relative group">
+                                        <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-[2rem] blur opacity-10 group-focus-within:opacity-25 transition duration-500" />
+                                        <div className="relative p-8 rounded-[2rem] bg-white border border-slate-100 shadow-xl space-y-6">
+                                            <textarea
+                                                className="w-full min-h-[200px] p-6 bg-slate-50/50 border border-slate-100 rounded-3xl text-sm font-bold text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/5 transition-all outline-none resize-none"
+                                                value={noteText}
+                                                onChange={(e) => setNoteText(e.target.value)}
+                                                placeholder="Add a note for this lead..."
+                                            />
+                                            <div className="flex justify-end">
+                                                <button 
+                                                    onClick={handleAddNote} 
+                                                    disabled={!noteText.trim()}
+                                                    className="px-10 py-4 rounded-2xl bg-indigo-600 text-white font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-indigo-600/20 hover:bg-indigo-500 disabled:opacity-50 disabled:shadow-none transition-all active:scale-95"
+                                                >
+                                                    Save note
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </TabPanel>
+                        )}
+
+                        {activeTab === 'proposals' && (
+                            <TabPanel>
+                                {leadProposals.length === 0 ? (
+                                    <div className="py-20 text-center">
+                                        <div className="h-24 w-24 rounded-full bg-slate-50 flex items-center justify-center mx-auto mb-6 border border-slate-100">
+                                            <Plus size={32} className="text-slate-200" />
+                                        </div>
+                                        <h3 className="mb-2 text-xl font-black text-slate-900">No proposals yet</h3>
+                                        <p className="mx-auto mb-8 max-w-xs text-sm font-medium text-slate-400">
+                                            Create the first proposal for this lead to start tracking proposal progress.
+                                        </p>
+                                        <Button 
+                                            onClick={() => navigate(`${ROUTES.proposals}/new?leadId=${lead._id}`)}
+                                            className="px-8 py-3 rounded-xl font-black tracking-widest bg-indigo-600"
+                                        >
+                                            Create proposal
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    <div className="overflow-x-auto rounded-[2rem] border border-slate-100 bg-white/50 backdrop-blur-sm">
+                                        <table className="w-full border-collapse">
+                                            <thead>
+                                                <tr className="bg-slate-50/50">
+                                                    <th className="px-8 py-5 text-left text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Proposal</th>
+                                                    <th className="px-6 py-5 text-left text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Stage</th>
+                                                    <th className="px-6 py-5 text-left text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Value</th>
+                                                    <th className="px-6 py-5 text-left text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Updated</th>
+                                                    <th className="px-8 py-5 text-right text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Action</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100">
+                                                {leadProposals.map((proposal) => (
+                                                    <tr key={proposal._id} className="group hover:bg-indigo-50/30 transition-all duration-300">
+                                                        <td className="px-8 py-5">
+                                                            <p className="font-black text-slate-900 group-hover:text-indigo-600 transition-colors tracking-tight">{proposal.title}</p>
+                                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{proposal.proposalNumber}</p>
+                                                        </td>
+                                                        <td className="px-6 py-5">
+                                                            <Badge variant={statusVariant(proposal.status)} className="shadow-sm py-1 px-3 text-[9px] font-black uppercase">
+                                                                {proposal.status}
+                                                            </Badge>
+                                                        </td>
+                                                        <td className="px-6 py-5 font-black text-slate-900">
+                                                            INR {(proposal.totalAmount || proposal.totalValue || 0).toLocaleString()}
+                                                        </td>
+                                                        <td className="px-6 py-5 text-xs font-bold text-slate-500">
+                                                            {formatDateTime(proposal.updatedAt)}
+                                                        </td>
+                                                        <td className="px-8 py-5 text-right">
+                                                            <button 
+                                                                className="px-6 py-2 rounded-xl border border-slate-200 text-xs font-black uppercase tracking-widest text-slate-600 hover:border-indigo-400 hover:text-indigo-600 hover:bg-white transition-all shadow-sm"
+                                                                onClick={(e) => {
+                                                                    e.preventDefault();
+                                                                    navigate(`${ROUTES.proposals}/${proposal._id}`);
+                                                                }}
+                                                            >
+                                                                Open
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </TabPanel>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            <ConfirmDialog
+                open={deleteOpen}
+                title="Delete lead"
+                message={`Are you sure you want to permanently delete ${lead.firstName}'s record? This action cannot be undone.`}
+                confirmLabel="Delete lead"
+                onCancel={() => setDeleteOpen(false)}
+                onConfirm={handleDelete}
             />
-        </MainLayout>
+        </div>
     );
 };
+
+

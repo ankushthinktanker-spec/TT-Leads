@@ -1,6 +1,7 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
-interface IProposalTemplate extends Document {
+export interface IProposalTemplate extends Document {
+    tenantId: mongoose.Types.ObjectId;
     // Basic Information
     name: string;
     description?: string;
@@ -31,11 +32,15 @@ interface IProposalTemplate extends Document {
 
 const proposalTemplateSchema = new Schema<IProposalTemplate>(
     {
+        tenantId: {
+            type: Schema.Types.ObjectId,
+            ref: 'Tenant',
+            required: [true, 'Tenant ID is strongly required for proposal template isolation']
+        },
         name: {
             type: String,
             required: [true, 'Template name is required'],
-            trim: true,
-            unique: true
+            trim: true
         },
         description: {
             type: String,
@@ -102,8 +107,9 @@ const proposalTemplateSchema = new Schema<IProposalTemplate>(
 );
 
 // Indexes
-proposalTemplateSchema.index({ isActive: 1, isDefault: -1 });
-proposalTemplateSchema.index({ category: 1 });
+proposalTemplateSchema.index({ tenantId: 1, name: 1 }, { unique: true });
+proposalTemplateSchema.index({ tenantId: 1, isActive: 1, isDefault: -1 });
+proposalTemplateSchema.index({ tenantId: 1, category: 1 });
 
 const ProposalTemplate = mongoose.model<IProposalTemplate>('ProposalTemplate', proposalTemplateSchema);
 

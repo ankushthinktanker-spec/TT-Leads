@@ -55,7 +55,30 @@ const initialState: LeadState = {
 // Async Thunks
 export const fetchLeads = createAsyncThunk(
     'leads/fetchLeads',
-    async ({ page = 1, limit = 10, status, search, due, ownerId }: { page?: number; limit?: number; status?: string; search?: string; due?: string; ownerId?: string }, { rejectWithValue }) => {
+    async (
+        {
+            page = 1,
+            limit = 10,
+            status,
+            search,
+            due,
+            ownerId,
+            source,
+            sortBy,
+            sortOrder
+        }: {
+            page?: number;
+            limit?: number;
+            status?: string;
+            search?: string;
+            due?: string;
+            ownerId?: string;
+            source?: string;
+            sortBy?: string;
+            sortOrder?: 'asc' | 'desc';
+        },
+        { rejectWithValue }
+    ) => {
         try {
             const params = new URLSearchParams({
                 page: page.toString(),
@@ -65,6 +88,9 @@ export const fetchLeads = createAsyncThunk(
             if (search) params.append('search', search);
             if (due) params.append('due', due);
             if (ownerId) params.append('ownerId', ownerId);
+            if (source) params.append('source', source);
+            if (sortBy) params.append('sortBy', sortBy);
+            if (sortOrder) params.append('sortOrder', sortOrder);
 
             const response = await axios.get(`/leads?${params.toString()}`);
             return response.data;
@@ -191,10 +217,12 @@ const leadSlice = createSlice({
         });
         builder.addCase(fetchLeads.fulfilled, (state, action) => {
             state.loading = false;
-            state.leads = action.payload.data.leads;
-            state.total = action.payload.data.pagination.total;
-            state.page = action.payload.data.pagination.page;
-            state.pages = action.payload.data.pagination.pages;
+            const data = action.payload?.data || {};
+            const meta = data.meta || action.payload?.pagination || {};
+            state.leads = data.items || data.leads || [];
+            state.total = meta?.totalItems ?? meta?.total ?? 0;
+            state.page = meta?.page ?? 1;
+            state.pages = meta?.totalPages ?? meta?.pages ?? 1;
         });
         builder.addCase(fetchLeads.rejected, (state, action) => {
             state.loading = false;

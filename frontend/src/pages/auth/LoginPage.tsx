@@ -1,5 +1,6 @@
 import { useState, FormEvent } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { ROUTES } from '../../routes';
 import { useAppDispatch, useAppSelector } from '../../hooks/redux';
 import { login, clearError } from '../../store/slices/authSlice';
 
@@ -28,7 +29,7 @@ export const LoginPage = () => {
 
         const result = await dispatch(login({ ...formData, remember: rememberMe }));
         if (login.fulfilled.match(result)) {
-            navigate('/dashboard');
+            navigate(ROUTES.dashboard);
         }
     };
 
@@ -41,7 +42,7 @@ export const LoginPage = () => {
     };
 
     return (
-        <div className="min-h-screen bg-secondary-950 flex items-center justify-center p-6 relative overflow-hidden">
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 relative overflow-hidden">
             <div className="absolute top-0 -left-20 w-96 h-96 bg-primary-500/10 rounded-full blur-[120px] animate-float"></div>
             <div className="absolute bottom-0 -right-20 w-96 h-96 bg-blue-500/10 rounded-full blur-[120px] animate-float" style={{ animationDelay: '2s' }}></div>
 
@@ -49,7 +50,7 @@ export const LoginPage = () => {
                 <div className="text-center mb-10 group cursor-default">
                     <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-primary-400 to-primary-600 rounded-2xl mb-6 shadow-2xl shadow-primary-500/20 group-hover:rotate-6 transition-transform duration-500">
                         <svg
-                            className="w-9 h-9 text-secondary-950"
+                            className="w-9 h-9 text-slate-950"
                             fill="none"
                             stroke="currentColor"
                             viewBox="0 0 24 24"
@@ -62,16 +63,16 @@ export const LoginPage = () => {
                             />
                         </svg>
                     </div>
-                    <h1 className="text-4xl font-black text-white tracking-tight mb-2">
+                    <h1 className="text-4xl font-black text-slate-900 tracking-tight mb-2">
                         THINK<span className="text-primary-500">TANKER</span>
                     </h1>
-                    <p className="text-secondary-400 font-semibold uppercase tracking-[0.2em] text-[10px]">Intelligence OS v1.0</p>
+                    <p className="text-slate-500 font-semibold uppercase tracking-[0.2em] text-[10px]">Intelligence OS v1.0</p>
                 </div>
 
                 <div className="glass-card p-8 sm:p-10 border-white/10 shadow-2xl">
                     <div className="mb-8">
-                        <h2 className="text-2xl font-bold text-white mb-1">Welcome back</h2>
-                        <p className="text-sm text-secondary-400 font-medium">Sign in to continue.</p>
+                        <h2 className="text-2xl font-bold text-slate-900 mb-1">Welcome back</h2>
+                        <p className="text-sm text-slate-500 font-medium">Sign in to continue.</p>
                     </div>
 
                     {(formError || error) && (
@@ -82,7 +83,7 @@ export const LoginPage = () => {
 
                     <form onSubmit={handleSubmit} className="space-y-6">
                         <div className="space-y-2">
-                            <label htmlFor="email" className="text-xs font-semibold uppercase tracking-widest text-secondary-400 ml-1">
+                            <label htmlFor="email" className="text-xs font-semibold uppercase tracking-widest text-slate-500 ml-1">
                                 Email
                             </label>
                             <input
@@ -99,11 +100,11 @@ export const LoginPage = () => {
 
                         <div className="space-y-2">
                             <div className="flex justify-between items-center ml-1">
-                                <label htmlFor="password" className="text-xs font-semibold uppercase tracking-widest text-secondary-400">
+                                <label htmlFor="password" className="text-xs font-semibold uppercase tracking-widest text-slate-500">
                                     Password
                                 </label>
                                 <Link
-                                    to="/forgot-password"
+                                    to={ROUTES.forgotPassword}
                                     className="text-[10px] text-primary-500 hover:text-primary-400 font-semibold uppercase tracking-widest"
                                 >
                                     Forgot password
@@ -123,7 +124,7 @@ export const LoginPage = () => {
                                 <button
                                     type="button"
                                     onClick={() => setShowPassword((prev) => !prev)}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] uppercase tracking-widest text-secondary-400 hover:text-primary-400 font-bold"
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] uppercase tracking-widest text-slate-500 hover:text-primary-400 font-bold"
                                     aria-label={showPassword ? 'Hide password' : 'Show password'}
                                 >
                                     {showPassword ? 'Hide' : 'Show'}
@@ -134,11 +135,11 @@ export const LoginPage = () => {
                         <div className="flex items-center gap-2 ml-1">
                             <input
                                 type="checkbox"
-                                className="w-4 h-4 rounded border-secondary-800 bg-secondary-900 text-primary-500 focus:ring-primary-500/30"
+                                className="w-4 h-4 rounded border-slate-300 bg-white text-primary-500 focus:ring-primary-500/30"
                                 checked={rememberMe}
                                 onChange={(e) => setRememberMe(e.target.checked)}
                             />
-                            <span className="text-xs text-secondary-300 font-medium">Remember this device</span>
+                            <span className="text-xs text-slate-600 font-medium">Remember this device</span>
                         </div>
 
                         <button
@@ -163,11 +164,11 @@ export const LoginPage = () => {
                         </button>
                     </form>
 
-                    <div className="mt-8 pt-6 border-t border-white/5 text-center">
-                        <p className="text-xs text-secondary-600 font-medium">
+                    <div className="mt-8 pt-6 border-t border-slate-200 text-center">
+                        <p className="text-xs text-slate-500 font-medium">
                             First time here?{' '}
                             <Link
-                                to="/contact-admin"
+                                to={ROUTES.contactAdmin}
                                 className="text-primary-500 hover:text-primary-400 font-bold underline decoration-primary-500/30 underline-offset-4"
                             >
                                 Contact Ops
@@ -177,7 +178,7 @@ export const LoginPage = () => {
                 </div>
 
                 <div className="mt-8 text-center">
-                    <p className="text-[10px] font-semibold text-secondary-600 uppercase tracking-[0.3em]">
+                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-[0.3em]">
                         (c) 2025 ThinkTanker // Advanced Analytics System
                     </p>
                 </div>
@@ -185,3 +186,5 @@ export const LoginPage = () => {
         </div>
     );
 };
+
+

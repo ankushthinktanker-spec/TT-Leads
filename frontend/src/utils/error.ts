@@ -1,11 +1,11 @@
 import axios from 'axios';
 
-type ErrorPayload = { message?: string };
+type ErrorPayload = { message?: string; error?: { message?: string } };
 
 export const getErrorMessage = (error: unknown, fallback: string): string => {
     if (axios.isAxiosError(error)) {
         const data = error.response?.data as ErrorPayload | undefined;
-        return data?.message || fallback;
+        return data?.error?.message || data?.message || fallback;
     }
     if (error instanceof Error) {
         return error.message || fallback;

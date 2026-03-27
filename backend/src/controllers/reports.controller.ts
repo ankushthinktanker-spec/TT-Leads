@@ -4,9 +4,10 @@ import Activity, { IActivity } from '../models/activity.model';
 import Task, { ITask } from '../models/task.model';
 import User from '../models/user.model';
 import LeadStageHistory from '../models/lead-stage-history.model';
+import Company from '../models/company.model';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { buildLeadFilters, DEFAULT_PROBABILITY_MAP, parseDateRange } from '../utils/reporting.utils';
-import { toCsv, toExcelXml } from '../utils/export.utils';
+import { toCsv, toExcelXml, toPdfBuffer } from '../utils/export.utils';
 import type { FilterQuery } from 'mongoose';
 
 const OPEN_STATUSES = ['New', 'Contacted', 'Qualified', 'Needs Analysis', 'Proposal Sent', 'Negotiation', 'Nurture'];
@@ -41,6 +42,21 @@ const buildActivityOwnerFilter = async (req: AuthRequest): Promise<FilterQuery<I
     return { createdBy: req.user!._id };
 };
 
+const buildCompanyOwnerFilter = async (req: AuthRequest) => {
+    const canViewTeam = req.user!.role === 'Admin' || req.user!.role === 'Manager';
+    const requestedScope = (req.query.ownerScope as string) || 'me';
+    const scope = canViewTeam ? requestedScope : 'me';
+
+    if (scope === 'all' && canViewTeam) return {};
+
+    if (scope === 'team' && req.user!.teamId) {
+        const teamMembers = await User.find({ teamId: req.user!.teamId }).select('_id');
+        return { createdBy: { $in: teamMembers.map((m) => m._id) } };
+    }
+
+    return { createdBy: req.user!._id };
+};
+
 type LeadFilter = FilterQuery<ILead>;
 
 const applyOrFilter = (filter: LeadFilter, orClause: LeadFilter[]) => {
@@ -55,12 +71,19 @@ const applyOrFilter = (filter: LeadFilter, orClause: LeadFilter[]) => {
     return filter;
 };
 
-const sendExport = (res: Response, rows: Record<string, unknown>[], format: string, filename: string) => {
+const sendExport = async (res: Response, rows: Record<string, unknown>[], format: string, filename: string) => {
     if (format === 'xlsx') {
         const xml = toExcelXml(rows, 'Report');
         res.setHeader('Content-Type', 'application/vnd.ms-excel');
         res.setHeader('Content-Disposition', `attachment; filename="${filename}.xls"`);
         res.send(xml);
+        return;
+    }
+    if (format === 'pdf') {
+        const pdfBuffer = await toPdfBuffer(rows, filename);
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}.pdf"`);
+        res.send(pdfBuffer);
         return;
     }
     const csv = toCsv(rows);
@@ -74,6 +97,11 @@ const formatUserName = (user?: { firstName?: string; lastName?: string }) => {
     const first = user.firstName || '';
     const last = user.lastName || '';
     return `${first} ${last}`.trim();
+};
+
+const getScopedLeadIds = async (req: AuthRequest): Promise<string[]> => {
+    const scopedLeads = await Lead.find(buildLeadFilters(req)).select('_id').lean();
+    return scopedLeads.map((lead) => lead._id.toString());
 };
 
 
@@ -96,7 +124,7 @@ export const leadRegisterReport = async (req: AuthRequest, res: Response, next: 
                 dealValue: lead.dealValue || 0,
                 assignedTo: formatUserName(lead.assignedTo as { firstName?: string; lastName?: string } | undefined)
             }));
-            return sendExport(res, rows, format, 'lead-register');
+            return await sendExport(res, rows, format, 'lead-register');
         }
 
         const skip = (Number(page) - 1) * Number(limit);
@@ -151,7 +179,7 @@ export const leadSourceReport = async (req: AuthRequest, res: Response, next: Ne
             conversionRate: row.leads ? row.won / row.leads : 0
         }));
 
-        if (format) return sendExport(res, rows, format, 'lead-source');
+        if (format) return await sendExport(res, rows, format, 'lead-source');
         res.status(200).json({ success: true, data: rows });
     } catch (error) {
         next(error);
@@ -174,7 +202,7 @@ export const leadStatusReport = async (req: AuthRequest, res: Response, next: Ne
             value: row.value
         }));
 
-        if (format) return sendExport(res, rows, format, 'lead-status');
+        if (format) return await sendExport(res, rows, format, 'lead-status');
         res.status(200).json({ success: true, data: rows });
     } catch (error) {
         next(error);
@@ -188,6 +216,7 @@ export const leadAgingReport = async (req: AuthRequest, res: Response, next: Nex
         const { format, stuckDays = '14' } = req.query as { format?: string; stuckDays?: string };
         const leads = await Lead.find(filter).select('status createdAt firstName lastName');
         const history = await LeadStageHistory.aggregate([
+            { $match: { leadId: { $in: leads.map((lead) => lead._id) } } },
             { $sort: { changedAt: -1 } },
             { $group: { _id: '$leadId', lastChangeAt: { $first: '$changedAt' } } }
         ]);
@@ -207,7 +236,7 @@ export const leadAgingReport = async (req: AuthRequest, res: Response, next: Nex
         });
 
         const stuck = rows.filter((row) => row.daysInStage >= Number(stuckDays));
-        if (format) return sendExport(res, rows, format, 'lead-aging');
+        if (format) return await sendExport(res, rows, format, 'lead-aging');
         res.status(200).json({ success: true, data: { rows, stuck } });
     } catch (error) {
         next(error);
@@ -235,7 +264,7 @@ export const leadResponseTimeReport = async (req: AuthRequest, res: Response, ne
             };
         });
 
-        if (format) return sendExport(res, rows, format, 'lead-response-time');
+        if (format) return await sendExport(res, rows, format, 'lead-response-time');
         res.status(200).json({ success: true, data: rows });
     } catch (error) {
         next(error);
@@ -265,7 +294,7 @@ export const duplicateLeadsReport = async (req: AuthRequest, res: Response, next
             leadIds: dup.leadIds.map((id: { toString(): string }) => id.toString()).join(',')
         }));
 
-        if (format) return sendExport(res, rows, format, 'duplicate-leads');
+        if (format) return await sendExport(res, rows, format, 'duplicate-leads');
         res.status(200).json({ success: true, data: rows });
     } catch (error) {
         next(error);
@@ -307,7 +336,7 @@ export const overdueFollowupsReport = async (req: AuthRequest, res: Response, ne
             assignedTo: formatUserName(task.assignedTo as { firstName?: string; lastName?: string } | undefined)
         }));
 
-        if (format) return sendExport(res, rows, format, 'overdue-followups');
+        if (format) return await sendExport(res, rows, format, 'overdue-followups');
         res.status(200).json({ success: true, data: rows });
     } catch (error) {
         next(error);
@@ -390,7 +419,7 @@ export const wonDealsReport = async (req: AuthRequest, res: Response, next: Next
             closedAt: lead.closedAt?.toISOString() || '',
             owner: formatUserName(lead.assignedTo as { firstName?: string; lastName?: string } | undefined)
         }));
-        if (format) return sendExport(res, rows, format, 'won-deals');
+        if (format) return await sendExport(res, rows, format, 'won-deals');
         res.status(200).json({ success: true, data: rows });
     } catch (error) {
         next(error);
@@ -409,7 +438,7 @@ export const lostDealsReport = async (req: AuthRequest, res: Response, next: Nex
             dealValue: lead.dealValue || 0,
             owner: formatUserName(lead.assignedTo as { firstName?: string; lastName?: string } | undefined)
         }));
-        if (format) return sendExport(res, rows, format, 'lost-deals');
+        if (format) return await sendExport(res, rows, format, 'lost-deals');
         res.status(200).json({ success: true, data: rows });
     } catch (error) {
         next(error);
@@ -420,8 +449,14 @@ export const lostDealsReport = async (req: AuthRequest, res: Response, next: Nex
 export const conversionReport = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
         const historyRange = parseDateRange(req.query.startDate as string, req.query.endDate as string);
+        const scopedLeadIds = await getScopedLeadIds(req);
         const transitions = await LeadStageHistory.aggregate([
-            { $match: historyRange ? { changedAt: historyRange } : {} },
+            {
+                $match: {
+                    ...(historyRange ? { changedAt: historyRange } : {}),
+                    leadId: { $in: scopedLeadIds }
+                }
+            },
             { $group: { _id: { from: '$fromStatus', to: '$toStatus' }, count: { $sum: 1 } } }
         ]);
         res.status(200).json({ success: true, data: transitions });
@@ -468,9 +503,11 @@ export const salesRepPerformanceReport = async (req: AuthRequest, res: Response,
 };
 
 // Workload Report
-export const workloadReport = async (_req: AuthRequest, res: Response, _next: NextFunction): Promise<void> => {
+export const workloadReport = async (req: AuthRequest, res: Response, _next: NextFunction): Promise<void> => {
     try {
+        const filter = buildLeadFilters(req);
         const results = await Lead.aggregate([
+            { $match: filter },
             { $group: { _id: '$assignedTo', leadCount: { $sum: 1 } } },
             { $sort: { leadCount: -1 } }
         ]);
@@ -487,4 +524,116 @@ export const paymentCollectionReport = async (_req: AuthRequest, res: Response):
 
 export const proposalToPaymentReport = async (_req: AuthRequest, res: Response): Promise<void> => {
     res.status(200).json({ success: true, data: [], message: 'No payment module detected' });
+};
+
+// Company Register Report
+export const companyRegisterReport = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const { page = '1', limit = '20', format } = req.query as { page?: string; limit?: string; format?: string };
+        const filter: FilterQuery<unknown> & { createdAt?: { $gte?: Date; $lte?: Date } } = await buildCompanyOwnerFilter(req);
+
+        const status = req.query.status as string | undefined;
+        const industry = req.query.industry as string | undefined;
+        const companySize = req.query.companySize as string | undefined;
+        if (status) filter.status = status;
+        if (industry) filter.industry = industry;
+        if (companySize) filter.companySize = companySize;
+
+        const createdRange = parseDateRange(req.query.startDate as string, req.query.endDate as string);
+        if (createdRange) filter.createdAt = createdRange;
+
+        if (format) {
+            const companies = await Company.find(filter);
+            const rows = companies.map((company) => ({
+                name: company.name,
+                email: company.email || '',
+                phone: company.phone || '',
+                industry: company.industry || '',
+                companySize: company.companySize || '',
+                status: company.status || '',
+                createdAt: company.createdAt?.toISOString()
+            }));
+            return await sendExport(res, rows, format, 'company-register');
+        }
+
+        const skip = (Number(page) - 1) * Number(limit);
+        const [paged, total] = await Promise.all([
+            Company.find(filter)
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(Number(limit)),
+            Company.countDocuments(filter)
+        ]);
+
+        res.status(200).json({
+            success: true,
+            data: {
+                companies: paged,
+                pagination: {
+                    page: Number(page),
+                    limit: Number(limit),
+                    total,
+                    pages: Math.ceil(total / Number(limit))
+                }
+            }
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// Company Industry Report
+export const companyIndustryReport = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const filter: FilterQuery<unknown> & { createdAt?: { $gte?: Date; $lte?: Date } } = await buildCompanyOwnerFilter(req);
+        const createdRange = parseDateRange(req.query.startDate as string, req.query.endDate as string);
+        if (createdRange) filter.createdAt = createdRange;
+
+        const { format } = req.query as { format?: string };
+        const results = await Company.aggregate([
+            { $match: filter },
+            { $group: { _id: '$industry', count: { $sum: 1 } } },
+            { $sort: { count: -1 } }
+        ]);
+
+        if (format) {
+            const rows = results.map((row) => ({
+                industry: row._id || 'Unknown',
+                count: row.count
+            }));
+            return await sendExport(res, rows, format, 'company-industry');
+        }
+
+        res.status(200).json({ success: true, data: results });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// Company Status Report
+export const companyStatusReport = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const filter: FilterQuery<unknown> & { createdAt?: { $gte?: Date; $lte?: Date } } = await buildCompanyOwnerFilter(req);
+        const createdRange = parseDateRange(req.query.startDate as string, req.query.endDate as string);
+        if (createdRange) filter.createdAt = createdRange;
+
+        const { format } = req.query as { format?: string };
+        const results = await Company.aggregate([
+            { $match: filter },
+            { $group: { _id: '$status', count: { $sum: 1 } } },
+            { $sort: { count: -1 } }
+        ]);
+
+        if (format) {
+            const rows = results.map((row) => ({
+                status: row._id || 'Unknown',
+                count: row.count
+            }));
+            return await sendExport(res, rows, format, 'company-status');
+        }
+
+        res.status(200).json({ success: true, data: results });
+    } catch (error) {
+        next(error);
+    }
 };

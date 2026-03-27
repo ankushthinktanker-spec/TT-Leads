@@ -41,3 +41,31 @@ export function getLeadStatusClasses(status: string): string {
             return 'status-neutral';
     }
 }
+
+export function getDealStatusClasses(status: string): string {
+    switch (status) {
+        case 'Open':
+            return 'status-warning';
+        case 'Won':
+            return 'status-success';
+        case 'Lost':
+            return 'status-danger';
+        default:
+            return 'status-neutral';
+    }
+}
+
+export function getSubscriptionStatusClasses(status: string): string {
+    switch (status) {
+        case 'Active':
+            return 'status-success';
+        case 'Paused':
+            return 'status-warning';
+        case 'Cancelled':
+            return 'status-danger';
+        case 'Expired':
+            return 'status-neutral';
+        default:
+            return 'status-neutral';
+    }
+}

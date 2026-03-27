@@ -1,10 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
 import { AppError } from './errorHandler';
 import User, { IUser } from '../models/user.model';
+import RevokedToken from '../models/revoked-token.model';
+import { verifyAccessToken } from '../utils/jwt.utils';
 
 export interface AuthRequest extends Request {
     user?: IUser;
+    tenantId?: string;
+    getTenantScope?: () => { tenantId: string };
 }
 
 export const protect = async (
@@ -28,7 +31,12 @@ export const protect = async (
         }
 
         // Verify token
-        const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { id: string };
+        const decoded = verifyAccessToken(token);
+
+        const revoked = await RevokedToken.exists({ jti: decoded.jti });
+        if (revoked) {
+            throw new AppError('Token has been revoked', 401);
+        }
 
         // Get user from token
         const user = await User.findById(decoded.id).select('-password');
@@ -42,6 +50,11 @@ export const protect = async (
         }
 
         req.user = user;
+        // Bind tenant ID explicitly for session isolation
+        if (user.tenantId) {
+            req.tenantId = (user.tenantId as any).toString();
+            req.getTenantScope = () => ({ tenantId: req.tenantId! });
+        }
         next();
     } catch (error) {
         next(error);

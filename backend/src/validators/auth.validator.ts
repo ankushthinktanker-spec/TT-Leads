@@ -1,12 +1,20 @@
 import Joi from 'joi';
 
+const strongPassword = Joi.string()
+    .min(10)
+    .max(128)
+    .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).+$/)
+    .messages({
+        'string.pattern.base': 'Password must include upper, lower, number, and special character'
+    });
+
 export const registerSchema = Joi.object({
     email: Joi.string().email().required().messages({
         'string.email': 'Please provide a valid email',
         'any.required': 'Email is required'
     }),
-    password: Joi.string().min(6).required().messages({
-        'string.min': 'Password must be at least 6 characters',
+    password: strongPassword.required().messages({
+        'string.min': 'Password must be at least 10 characters',
         'any.required': 'Password is required'
     }),
     firstName: Joi.string().required().messages({
@@ -48,8 +56,8 @@ export const changePasswordSchema = Joi.object({
     currentPassword: Joi.string().required().messages({
         'any.required': 'Current password is required'
     }),
-    newPassword: Joi.string().min(6).required().messages({
-        'string.min': 'New password must be at least 6 characters',
+    newPassword: strongPassword.required().messages({
+        'string.min': 'New password must be at least 10 characters',
         'any.required': 'New password is required'
     })
 });

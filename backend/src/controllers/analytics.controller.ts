@@ -162,6 +162,7 @@ export const getDashboard = async (
 ): Promise<void> => {
     try {
         const leadFilter = buildLeadFilters(req);
+        const scopedLeadIds = (await Lead.find(leadFilter).select('_id').lean()).map((lead) => lead._id);
 
         const openStatusFilter = leadFilter.status ? leadFilter.status : { $in: OPEN_STATUSES };
         const [totalLeads, newLeads, openLeads, qualifiedLeads, wonDeals, lostDeals] = await Promise.all([
@@ -237,7 +238,12 @@ export const getDashboard = async (
 
         const historyDateRange = parseDateRange(req.query.startDate as string, req.query.endDate as string);
         const stageConversion = await LeadStageHistory.aggregate([
-            { $match: historyDateRange ? { changedAt: historyDateRange } : {} },
+            {
+                $match: {
+                    ...(historyDateRange ? { changedAt: historyDateRange } : {}),
+                    leadId: { $in: scopedLeadIds }
+                }
+            },
             { $group: { _id: { from: '$fromStatus', to: '$toStatus' }, count: { $sum: 1 } } }
         ]);
 
@@ -254,6 +260,7 @@ export const getDashboard = async (
         }));
 
         const latestStageChanges = await LeadStageHistory.aggregate([
+            { $match: { leadId: { $in: scopedLeadIds } } },
             { $sort: { changedAt: -1 } },
             {
                 $group: {
@@ -644,6 +651,7 @@ export const getLossAnalytics = async (req: AuthRequest, res: Response, next: Ne
     try {
         const leadFilter = buildLeadFilters(req);
         const historyRange = parseDateRange(req.query.startDate as string, req.query.endDate as string);
+        const scopedLeadIds = (await Lead.find(leadFilter).select('_id').lean()).map((lead) => lead._id);
         const lostReasons = await Lead.aggregate([
             { $match: { ...leadFilter, status: 'Lost' } },
             { $group: { _id: '$lostReason', count: { $sum: 1 } } },
@@ -651,7 +659,12 @@ export const getLossAnalytics = async (req: AuthRequest, res: Response, next: Ne
         ]);
 
         const dropOffStages = await LeadStageHistory.aggregate([
-            { $match: historyRange ? { changedAt: historyRange } : {} },
+            {
+                $match: {
+                    ...(historyRange ? { changedAt: historyRange } : {}),
+                    leadId: { $in: scopedLeadIds }
+                }
+            },
             { $group: { _id: '$fromStatus', count: { $sum: 1 } } },
             { $sort: { count: -1 } }
         ]);

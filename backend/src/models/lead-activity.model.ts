@@ -6,7 +6,8 @@ type LeadActivityType =
     | 'FOLLOWUP_SCHEDULED'
     | 'FOLLOWUP_COMPLETED';
 
-interface ILeadActivity extends Document {
+export interface ILeadActivity extends Document {
+    tenantId: mongoose.Types.ObjectId;
     leadId: mongoose.Types.ObjectId;
     type: LeadActivityType;
     message: string;
@@ -18,6 +19,12 @@ interface ILeadActivity extends Document {
 
 const leadActivitySchema = new Schema<ILeadActivity>(
     {
+        tenantId: {
+            type: Schema.Types.ObjectId,
+            ref: 'Tenant',
+            required: [true, 'Tenant ID is required for lead activity isolation'],
+            index: true
+        },
         leadId: {
             type: Schema.Types.ObjectId,
             ref: 'Lead',
@@ -49,7 +56,7 @@ const leadActivitySchema = new Schema<ILeadActivity>(
     }
 );
 
-leadActivitySchema.index({ leadId: 1, createdAt: -1 });
+leadActivitySchema.index({ tenantId: 1, leadId: 1, createdAt: -1 });
 
 const LeadActivity = mongoose.model<ILeadActivity>('LeadActivity', leadActivitySchema);
 

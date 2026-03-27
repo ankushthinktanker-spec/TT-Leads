@@ -1,16 +1,25 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Building2, Edit, Mail, Phone, Trash2, User, Plus, Inbox } from 'lucide-react';
 import { useAppDispatch, useAppSelector } from '../../hooks/redux';
 import { fetchContacts, deleteContact } from '../../store/slices/contactSlice';
 import { fetchCompanies } from '../../store/slices/companySlice';
-import MainLayout from '../../components/layout/MainLayout';
-import { Search, Plus, User, Edit, Trash2, Phone, Mail } from 'lucide-react';
 import ContactFormModal from '../../components/contacts/ContactFormModal';
-import PageLayout from '../../components/ui/PageLayout';
-import PageHeader from '../../components/ui/PageHeader';
-import FilterBar from '../../components/ui/FilterBar';
-import SurfaceCard from '../../components/ui/SurfaceCard';
-import EmptyState from '../../components/ui/EmptyState';
-import { Table, TableHead, TableRow, TableHeadCell, TableBody, TableCell } from '../../components/ui/Table';
+import { useGlobalSearch } from '../../context/GlobalSearchContext';
+import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import { showToast } from '../../utils/toast';
+import {
+    ModulePageShell,
+    ModulePageHeader,
+    ModuleToolbar,
+    ModuleSummaryCards,
+    ModuleDataTable,
+    ModuleBadge,
+    ModuleRowActions,
+    type ModuleColumnDef,
+    type ActiveFilter,
+    type SummaryCardItem,
+    type SortOrder
+} from '../../components/module-system';
 
 interface ContactRecord {
     _id: string;
@@ -25,37 +34,61 @@ interface ContactRecord {
     status: 'Active' | 'Inactive';
 }
 
-const ContactsPage = () => {
+export const ContactsPage = () => {
     const dispatch = useAppDispatch();
-    const { contacts, loading, pagination } = useAppSelector((state) => state.contacts);
+    const { contacts, loading, error, pagination } = useAppSelector((state) => state.contacts);
     const { companies } = useAppSelector((state) => state.companies);
+    const safePagination = pagination ?? { page: 1, pages: 1, total: 0, limit: 10 };
 
-    const [search, setSearch] = useState('');
+    const { value: search, setValue: setSearch } = useGlobalSearch();
     const [companyFilter, setCompanyFilter] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
+    const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
     const [currentPage, setCurrentPage] = useState(1);
+    
     const [showModal, setShowModal] = useState(false);
-    const [editingContact, setEditingContact] = useState<ContactRecord | null>(null);
+    const [editingContact, setEditingContact] = useState<ContactRecord | undefined>(undefined);
+    const [deleteId, setDeleteId] = useState<string | null>(null);
 
     useEffect(() => {
-        dispatch(fetchCompanies({ limit: 100 })); // Load companies for filter
+        dispatch(fetchCompanies({ limit: 100 }));
     }, [dispatch]);
 
     useEffect(() => {
         dispatch(fetchContacts({
             page: currentPage,
-            limit: 10,
+            limit: 20,
             search,
             companyId: companyFilter,
-            status: statusFilter
+            status: statusFilter,
+            sortBy: 'createdAt',
+            sortOrder
         }));
-    }, [dispatch, currentPage, search, companyFilter, statusFilter]);
+    }, [dispatch, currentPage, search, companyFilter, statusFilter, sortOrder]);
 
-    const handleDelete = async (id: string) => {
-        if (window.confirm('Are you sure you want to delete this contact?')) {
-            await dispatch(deleteContact(id));
-            dispatch(fetchContacts({ page: currentPage }));
-        }
+    const activeFilters: ActiveFilter[] = [
+        ...(search.trim() ? [{ key: 'search', label: `Search: "${search.trim()}"`, onRemove: () => setSearch('') }] : []),
+        ...(companyFilter ? [{ 
+            key: 'company', 
+            label: `Company: ${companies.find((c) => c._id === companyFilter)?.name || 'Selected'}`, 
+            onRemove: () => setCompanyFilter('') 
+        }] : []),
+        ...(statusFilter ? [{ key: 'status', label: `Status: ${statusFilter}`, onRemove: () => setStatusFilter('') }] : []),
+    ];
+
+    const handleClearFilters = () => {
+        setSearch('');
+        setCompanyFilter('');
+        setStatusFilter('');
+        setCurrentPage(1);
+    };
+
+    const confirmDelete = async () => {
+        if (!deleteId) return;
+        await dispatch(deleteContact(deleteId));
+        setDeleteId(null);
+        dispatch(fetchContacts({ page: currentPage, limit: 20, search, companyId: companyFilter, status: statusFilter, sortBy: 'createdAt', sortOrder }));
+        showToast('Contact deleted successfully.', 'success');
     };
 
     const handleEdit = (contact: ContactRecord) => {
@@ -65,261 +98,278 @@ const ContactsPage = () => {
 
     const handleCloseModal = () => {
         setShowModal(false);
-        setEditingContact(null);
-        dispatch(fetchContacts({ page: currentPage }));
+        setEditingContact(undefined);
+        dispatch(fetchContacts({ page: currentPage, limit: 20, search, companyId: companyFilter, status: statusFilter, sortBy: 'createdAt', sortOrder }));
     };
 
-    const activeFilters = useMemo(() => {
-        const filters: string[] = [];
-        if (search.trim()) filters.push(`Search: ${search.trim()}`);
-        if (companyFilter) {
-            const company = companies.find((item) => item._id === companyFilter);
-            filters.push(`Company: ${company?.name || 'Selected'}`);
+    const activeContacts = contacts.filter((contact) => contact.status === 'Active').length;
+    const primaryContacts = contacts.filter((contact) => contact.isPrimary).length;
+    const companyCoverage = useMemo(
+        () => new Set(
+            contacts
+                .map((contact) => typeof contact.companyId === 'string' ? contact.companyId : contact.companyId?._id)
+                .filter(Boolean)
+        ).size,
+        [contacts]
+    );
+
+    const summaryCards: SummaryCardItem[] = [
+        { label: 'Total Contacts', value: safePagination.total, icon: <User size={18} />, variant: 'primary' },
+        { label: 'Active', value: activeContacts, icon: <User size={18} />, variant: 'success' },
+        { label: 'Primary Contacts', value: primaryContacts, icon: <User size={18} />, variant: 'purple' },
+        { label: 'Companies Connected', value: companyCoverage, icon: <Building2 size={18} />, variant: 'info' },
+    ];
+
+    const columns: ModuleColumnDef<ContactRecord>[] = [
+        {
+            id: 'name',
+            header: 'Name',
+            width: '30%',
+            cell: (contact) => (
+                <button
+                    type="button"
+                    className="mod-table__lead-cell"
+                    onClick={() => handleEdit(contact)}
+                >
+                    <div className="mod-table__avatar mod-table__avatar--green">
+                        <User size={16} />
+                    </div>
+                    <div style={{ minWidth: 0, textAlign: 'left' }}>
+                        <div className="mod-table__primary-text">
+                            {contact.firstName} {contact.lastName}
+                            {contact.isPrimary && (
+                                <span style={{ marginLeft: 8 }} className="mod-badge mod-badge--neutral mod-badge--dot">
+                                    Primary
+                                </span>
+                            )}
+                        </div>
+                        <div className="mod-table__secondary-text">
+                            {contact.designation || '-'}
+                        </div>
+                    </div>
+                </button>
+            )
+        },
+        {
+            id: 'company',
+            header: 'Company',
+            width: '18%',
+            cell: (contact) => (
+                <div className="mod-table__primary-text" style={{ fontSize: 13 }}>
+                    {typeof contact.companyId === 'string' ? contact.companyId : contact.companyId?.name || '-'}
+                </div>
+            )
+        },
+        {
+            id: 'contact',
+            header: 'Contact',
+            width: '26%',
+            cell: (contact) => (
+                <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-1.5 text-[13px] text-slate-700">
+                        <Mail size={12} style={{ color: 'var(--mod-text-muted)' }} />
+                        <a href={`mailto:${contact.email}`} className="truncate hover:text-blue-600 transition-colors" onClick={(e) => e.stopPropagation()}>
+                            {contact.email}
+                        </a>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
+                        <Phone size={12} style={{ color: 'var(--mod-text-muted)' }} />
+                        <a href={`tel:${contact.phone}`} className="truncate hover:text-blue-600 transition-colors" onClick={(e) => e.stopPropagation()}>
+                            {contact.phone}
+                        </a>
+                    </div>
+                </div>
+            )
+        },
+        {
+            id: 'role',
+            header: 'Role',
+            width: '14%',
+            cell: (contact) => (
+                <div className="mod-table__primary-text" style={{ fontSize: 13 }}>
+                    {contact.department || '-'}
+                </div>
+            )
+        },
+        {
+            id: 'status',
+            header: 'Status',
+            width: '10%',
+            cell: (contact) => (
+                <ModuleBadge variant={contact.status === 'Active' ? 'success' : 'neutral'}>
+                    {contact.status}
+                </ModuleBadge>
+            )
+        },
+        {
+            id: 'actions',
+            header: '',
+            align: 'right',
+            width: '80px',
+            cell: (contact) => (
+                <ModuleRowActions
+                    actions={[
+                        {
+                            label: 'Edit contact',
+                            icon: <Edit size={14} />,
+                            onClick: () => handleEdit(contact)
+                        },
+                        {
+                            label: 'Delete',
+                            icon: <Trash2 size={14} />,
+                            onClick: () => setDeleteId(contact._id),
+                            danger: true,
+                            divider: true
+                        }
+                    ]}
+                />
+            )
         }
-        if (statusFilter) filters.push(`Status: ${statusFilter}`);
-        return filters;
-    }, [search, companyFilter, statusFilter, companies]);
-
-    const hasActiveFilters = activeFilters.length > 0;
-
-    const handleClearFilters = () => {
-        setSearch('');
-        setCompanyFilter('');
-        setStatusFilter('');
-    };
+    ];
 
     return (
-        <MainLayout>
-            <PageLayout>
-                <PageHeader
-                    title="Contacts"
-                    subtitle="Manage your contact database"
-                    actions={(
-                        <button
-                            onClick={() => setShowModal(true)}
-                            className="btn btn-primary"
-                        >
-                            <Plus size={20} />
-                            Add Contact
-                        </button>
-                    )}
-                />
+        <ModulePageShell>
+            <ModulePageHeader
+                eyebrow="CRM · Contacts"
+                title="Contacts"
+                description="Keep decision-makers, primary stakeholders, and company-linked communication records in one tighter operator view."
+                actions={
+                    <button
+                        className="mod-btn mod-btn--primary"
+                        onClick={() => {
+                            setEditingContact(undefined);
+                            setShowModal(true);
+                        }}
+                    >
+                        <Plus size={14} /> Add Contact
+                    </button>
+                }
+            />
 
-                <FilterBar className="mt-6">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-secondary-500" size={20} />
-                            <input
-                                type="text"
-                                placeholder="Search contacts..."
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                className="input pl-10"
-                            />
+            <ModuleSummaryCards cards={summaryCards} />
+
+            <ModuleToolbar
+                searchValue={search}
+                searchPlaceholder="Search contacts, email, company..."
+                onSearchChange={setSearch}
+                activeFilters={activeFilters}
+                onClearAllFilters={handleClearFilters}
+                totalCount={safePagination.total}
+                countLabel="contacts"
+                filterContent={
+                    <>
+                        <div>
+                            <label className="mod-filter-panel__field-label">Company</label>
+                            <select
+                                className="mod-toolbar__select"
+                                style={{ width: '100%' }}
+                                value={companyFilter}
+                                onChange={(e) => setCompanyFilter(e.target.value)}
+                            >
+                                <option value="">All companies</option>
+                                {companies.map((company) => (
+                                    <option key={company._id} value={company._id}>{company.name}</option>
+                                ))}
+                            </select>
                         </div>
-
-                        <select
-                            value={companyFilter}
-                            onChange={(e) => setCompanyFilter(e.target.value)}
-                            className="input"
-                        >
-                            <option value="">All Companies</option>
-                            {companies.map((company) => (
-                                <option key={company._id} value={company._id}>{company.name}</option>
-                            ))}
-                        </select>
-
-                        <select
-                            value={statusFilter}
-                            onChange={(e) => setStatusFilter(e.target.value)}
-                            className="input"
-                        >
-                            <option value="">All Status</option>
-                            <option value="Active">Active</option>
-                            <option value="Inactive">Inactive</option>
-                        </select>
-                    </div>
-                </FilterBar>
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                    {activeFilters.map((filter) => (
-                        <span key={filter} className="filter-chip">
-                            {filter}
-                        </span>
+                        <div>
+                            <label className="mod-filter-panel__field-label">Status</label>
+                            <select
+                                className="mod-toolbar__select"
+                                style={{ width: '100%' }}
+                                value={statusFilter}
+                                onChange={(e) => setStatusFilter(e.target.value)}
+                            >
+                                <option value="">All statuses</option>
+                                <option value="Active">Active</option>
+                                <option value="Inactive">Inactive</option>
+                            </select>
+                        </div>
+                    </>
+                }
+            >
+                <select
+                    className="mod-toolbar__select"
+                    value={companyFilter}
+                    onChange={(e) => setCompanyFilter(e.target.value)}
+                >
+                    <option value="">All companies</option>
+                    {companies.map((company) => (
+                        <option key={company._id} value={company._id}>{company.name}</option>
                     ))}
-                    {hasActiveFilters && (
-                        <button
-                            type="button"
-                            onClick={handleClearFilters}
-                            className="ml-auto text-xs text-primary-400 font-semibold uppercase tracking-widest hover:text-primary-300"
-                        >
-                            Clear filters
-                        </button>
-                    )}
+                </select>
+
+                <select
+                    className="mod-toolbar__select"
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                >
+                    <option value="">All statuses</option>
+                    <option value="Active">Active</option>
+                    <option value="Inactive">Inactive</option>
+                </select>
+            </ModuleToolbar>
+
+            {error && (
+                <div style={{
+                    padding: '12px 16px',
+                    background: 'var(--mod-danger-light)',
+                    border: '1px solid #fecaca',
+                    borderRadius: 'var(--mod-radius-lg)',
+                    color: 'var(--mod-danger-text)',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    marginBottom: 16
+                }}>
+                    {error}
                 </div>
+            )}
 
-                <SurfaceCard className="mt-6 overflow-hidden">
-                    {loading ? (
-                        <div className="flex justify-center items-center h-64">
-                            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-brand-500"></div>
-                        </div>
-                    ) : contacts.length === 0 ? (
-                        <EmptyState
-                            icon={<User size={48} />}
-                            title="No contacts found"
-                            description="Create your first contact to get started."
-                            action={(
-                                <button
-                                    onClick={() => setShowModal(true)}
-                                    className="btn btn-outline"
-                                >
-                                    Create contact
-                                </button>
-                            )}
-                        />
-                    ) : (
-                        <>
-                            <div className="overflow-x-auto">
-                                <Table>
-                                    <TableHead>
-                                        <TableRow>
-                                            <TableHeadCell>Name</TableHeadCell>
-                                            <TableHeadCell>Company</TableHeadCell>
-                                            <TableHeadCell>Contact Info</TableHeadCell>
-                                            <TableHeadCell>Role</TableHeadCell>
-                                            <TableHeadCell>Status</TableHeadCell>
-                                            <TableHeadCell className="text-right">Actions</TableHeadCell>
-                                        </TableRow>
-                                    </TableHead>
-                                    <TableBody>
-                                        {contacts.map((contact) => (
-                                            <TableRow key={contact._id} className="group">
-                                                <TableCell>
-                                                    <div className="flex items-center">
-                                                        <div className="flex-shrink-0 h-10 w-10 bg-brand-500/10 rounded-full flex items-center justify-center">
-                                                            <User className="text-brand-400" size={20} />
-                                                        </div>
-                                                        <div className="ml-4">
-                                                            <div className="text-sm font-medium text-secondary-100">
-                                                                {contact.firstName} {contact.lastName}
-                                                                {contact.isPrimary && (
-                                                                    <span className="ml-2 px-2 py-0.5 text-[10px] rounded-full bg-brand-500/15 text-brand-300">
-                                                                        Primary
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                            <div className="text-xs text-secondary-500">{contact.designation || '-'}</div>
-                                                        </div>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>{contact.companyId?.name || '-'}</TableCell>
-                                                <TableCell>
-                                                    <div className="flex flex-col gap-1">
-                                                        <div className="flex items-center gap-2 text-sm text-secondary-100">
-                                                            <Mail size={14} />
-                                                            <a href={`mailto:${contact.email}`} className="text-primary-400 hover:text-primary-300">
-                                                                {contact.email}
-                                                            </a>
-                                                        </div>
-                                                        <div className="flex items-center gap-2 text-xs text-secondary-500">
-                                                            <Phone size={14} />
-                                                            <a href={`tel:${contact.phone}`} className="text-secondary-100 hover:text-primary-400">
-                                                                {contact.phone}
-                                                            </a>
-                                                        </div>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>{contact.department || '-'}</TableCell>
-                                                <TableCell>
-                                                    <span className={`status-pill ${contact.status === 'Active' ? 'status-success' : 'status-neutral'}`}>
-                                                        {contact.status}
-                                                    </span>
-                                                </TableCell>
-                                                <TableCell className="text-right">
-                                                    <div className="flex justify-end gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                                                        <button
-                                                            onClick={() => handleEdit(contact)}
-                                                            className="icon-button"
-                                                            title="Edit"
-                                                        >
-                                                            <Edit size={18} />
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleDelete(contact._id)}
-                                                            className="icon-button text-red-400 hover:text-red-300"
-                                                            title="Delete"
-                                                        >
-                                                            <Trash2 size={18} />
-                                                        </button>
-                                                    </div>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            </div>
+            <ModuleDataTable
+                rows={contacts}
+                columns={columns}
+                rowKey={(contact) => contact._id}
+                loading={loading}
+                error={null}
+                tableTitle="Contact Directory"
+                tableBadge={`${contacts.length} visible`}
+                emptyTitle="No contacts yet"
+                emptyDescription="Add your first contact to start managing decision-makers and communication history."
+                emptyIcon={<Inbox size={28} />}
+                emptyAction={
+                    <button
+                        className="mod-btn mod-btn--primary"
+                        onClick={() => {
+                            setEditingContact(undefined);
+                            setShowModal(true);
+                        }}
+                    >
+                        <Plus size={14} /> Add Contact
+                    </button>
+                }
+                page={safePagination.page}
+                totalPages={safePagination.pages}
+                totalItems={safePagination.total}
+                onPageChange={(nextPage) => setCurrentPage(nextPage)}
+                onRowClick={(contact) => handleEdit(contact)}
+            />
 
-                            {/* Pagination */}
-                            {pagination.pages > 1 && (
-                                <div className="px-4 py-3 flex items-center justify-between border-t border-white/5">
-                                    <div className="flex-1 flex justify-between sm:hidden">
-                                        <button
-                                            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                                            disabled={currentPage === 1}
-                                            className="btn btn-outline py-1.5 px-3 text-xs"
-                                        >
-                                            Previous
-                                        </button>
-                                        <button
-                                            onClick={() => setCurrentPage(prev => Math.min(prev + 1, pagination.pages))}
-                                            disabled={currentPage === pagination.pages}
-                                            className="btn btn-outline py-1.5 px-3 text-xs"
-                                        >
-                                            Next
-                                        </button>
-                                    </div>
-                                    <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-                                        <div>
-                                            <p className="text-sm text-secondary-400">
-                                                Showing <span className="font-medium text-secondary-100">{(currentPage - 1) * pagination.limit + 1}</span> to{' '}
-                                                <span className="font-medium text-secondary-100">{Math.min(currentPage * pagination.limit, pagination.total)}</span> of{' '}
-                                                <span className="font-medium text-secondary-100">{pagination.total}</span> results
-                                            </p>
-                                        </div>
-                                        <div className="flex gap-2">
-                                            <button
-                                                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                                                disabled={currentPage === 1}
-                                                className="btn btn-outline py-1.5 px-3 text-xs"
-                                            >
-                                                Previous
-                                            </button>
-                                            <span className="px-3 py-1.5 text-xs rounded-lg border border-white/5 text-secondary-300">
-                                                Page {currentPage} of {pagination.pages}
-                                            </span>
-                                            <button
-                                                onClick={() => setCurrentPage(prev => Math.min(prev + 1, pagination.pages))}
-                                                disabled={currentPage === pagination.pages}
-                                                className="btn btn-outline py-1.5 px-3 text-xs"
-                                            >
-                                                Next
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-                        </>
-                    )}
-                </SurfaceCard>
-            </PageLayout>
+            <ConfirmDialog
+                open={!!deleteId}
+                title="Delete contact"
+                message="Are you sure you want to delete this contact? This action cannot be undone."
+                confirmLabel="Delete contact"
+                onConfirm={confirmDelete}
+                onCancel={() => setDeleteId(null)}
+            />
 
-            {/* Modal */}
             {showModal && (
                 <ContactFormModal
                     contact={editingContact}
                     onClose={handleCloseModal}
                 />
             )}
-        </MainLayout>
+        </ModulePageShell>
     );
 };
 

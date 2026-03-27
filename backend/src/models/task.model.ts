@@ -1,6 +1,7 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
 export interface ITask extends Document {
+    tenantId: mongoose.Types.ObjectId;
     // Task Information
     title: string;
     description?: string;
@@ -32,6 +33,11 @@ export interface ITask extends Document {
 
 const taskSchema = new Schema<ITask>(
     {
+        tenantId: {
+            type: Schema.Types.ObjectId,
+            ref: 'Tenant',
+            required: [true, 'Tenant ID is strongly required to identify task containment']
+        },
         title: {
             type: String,
             required: [true, 'Task title is required'],
@@ -102,12 +108,12 @@ const taskSchema = new Schema<ITask>(
     }
 );
 
-// Indexes
-taskSchema.index({ assignedTo: 1, status: 1, dueDate: 1 });
-taskSchema.index({ dueDate: 1 });
-taskSchema.index({ reminderDate: 1 });
-taskSchema.index({ 'relatedTo.model': 1, 'relatedTo.id': 1 });
-taskSchema.index({ status: 1, priority: -1 });
+// Indexes for Multi-Tenancy mapping
+taskSchema.index({ tenantId: 1, assignedTo: 1, status: 1, dueDate: 1 });
+taskSchema.index({ tenantId: 1, dueDate: 1 });
+taskSchema.index({ tenantId: 1, reminderDate: 1 });
+taskSchema.index({ tenantId: 1, 'relatedTo.model': 1, 'relatedTo.id': 1 });
+taskSchema.index({ tenantId: 1, status: 1, priority: -1 });
 
 // Auto-update completedAt when status changes to Completed
 taskSchema.pre('save', function (next) {

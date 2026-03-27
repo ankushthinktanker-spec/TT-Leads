@@ -1,6 +1,7 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
 interface IContact extends Document {
+    tenantId: mongoose.Types.ObjectId;
     // Personal Information
     firstName: string;
     lastName: string;
@@ -29,6 +30,11 @@ interface IContact extends Document {
 
 const contactSchema = new Schema<IContact>(
     {
+        tenantId: {
+            type: Schema.Types.ObjectId,
+            ref: 'Tenant',
+            required: [true, 'Tenant ID is strongly required for contact isolation']
+        },
         firstName: {
             type: String,
             required: [true, 'First name is required'],
@@ -106,12 +112,12 @@ const contactSchema = new Schema<IContact>(
 );
 
 // Indexes
-contactSchema.index({ email: 1 });
-contactSchema.index({ phone: 1 });
-contactSchema.index({ status: 1 });
-contactSchema.index({ createdBy: 1 });
-contactSchema.index({ companyId: 1, isPrimary: -1 });
-contactSchema.index({ firstName: 1, lastName: 1 });
+contactSchema.index({ tenantId: 1, email: 1 });
+contactSchema.index({ tenantId: 1, phone: 1 });
+contactSchema.index({ tenantId: 1, status: 1 });
+contactSchema.index({ tenantId: 1, createdBy: 1 });
+contactSchema.index({ tenantId: 1, companyId: 1, isPrimary: -1 });
+contactSchema.index({ tenantId: 1, firstName: 1, lastName: 1 });
 
 // Virtual for full name
 contactSchema.virtual('fullName').get(function () {

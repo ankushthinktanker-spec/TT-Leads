@@ -1,5 +1,7 @@
 import mongoose, { Document, Schema } from 'mongoose';
 import bcrypt from 'bcryptjs';
+import { env } from '../config/env';
+
 
 export interface IUser extends Document {
     email: string;
@@ -9,6 +11,7 @@ export interface IUser extends Document {
     phone?: string;
     avatar?: string;
     role: string;
+    tenantId: mongoose.Types.ObjectId; // Critical for multi-tenancy
     status: 'Active' | 'Inactive' | 'Suspended';
     teamId?: mongoose.Types.ObjectId;
     managerId?: mongoose.Types.ObjectId;
@@ -22,6 +25,13 @@ export interface IUser extends Document {
     lastLogin?: Date;
     refreshTokenHash?: string;
     refreshTokenExpiresAt?: Date;
+    refreshTokenJti?: string;
+    refreshTokenClientHash?: string;
+    loginAttempts: number;
+    lockUntil?: Date;
+    mfaEnabled: boolean;
+    mfaMethod?: 'totp' | 'sms' | 'email';
+    mfaSecretEncrypted?: string;
     createdAt: Date;
     updatedAt: Date;
     comparePassword(candidatePassword: string): Promise<boolean>;
@@ -41,7 +51,7 @@ const userSchema = new Schema<IUser>(
         password: {
             type: String,
             required: [true, 'Password is required'],
-            minlength: [6, 'Password must be at least 6 characters'],
+            minlength: [10, 'Password must be at least 10 characters'],
             select: false
         },
         firstName: {
@@ -70,6 +80,11 @@ const userSchema = new Schema<IUser>(
             type: String,
             enum: ['Active', 'Inactive', 'Suspended'],
             default: 'Active'
+        },
+        tenantId: {
+            type: Schema.Types.ObjectId,
+            ref: 'Tenant',
+            required: [true, 'Tenant ID is strongly required to identify user containment']
         },
         teamId: {
             type: Schema.Types.ObjectId,
@@ -115,6 +130,31 @@ const userSchema = new Schema<IUser>(
         },
         refreshTokenExpiresAt: {
             type: Date
+        },
+        refreshTokenJti: {
+            type: String
+        },
+        refreshTokenClientHash: {
+            type: String
+        },
+        loginAttempts: {
+            type: Number,
+            default: 0
+        },
+        lockUntil: {
+            type: Date
+        },
+        mfaEnabled: {
+            type: Boolean,
+            default: false
+        },
+        mfaMethod: {
+            type: String,
+            enum: ['totp', 'sms', 'email']
+        },
+        mfaSecretEncrypted: {
+            type: String,
+            select: false
         }
     },
     {
@@ -127,11 +167,14 @@ userSchema.pre('save', async function (next) {
     if (!this.isModified('password')) {
         return next();
     }
-
-    const salt = await bcrypt.genSalt(10);
+    const salt = await bcrypt.genSalt(env.BCRYPT_ROUNDS);
     this.password = await bcrypt.hash(this.password, salt);
     next();
 });
+
+// Indexes for Multi-Tenancy
+userSchema.index({ tenantId: 1, email: 1 }, { unique: true });
+userSchema.index({ tenantId: 1, status: 1 });
 
 // Method to compare password
 userSchema.methods.comparePassword = async function (

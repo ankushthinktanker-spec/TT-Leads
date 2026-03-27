@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { User, Mail, Phone, Building2, MousePointer2, Briefcase, Calendar, Info, ShieldCheck, AlertCircle } from 'lucide-react';
 import { useAppDispatch, useAppSelector } from '../../hooks/redux';
 import { fetchCompanies } from '../../store/slices/companySlice';
 import { fetchContacts } from '../../store/slices/contactSlice';
@@ -7,26 +8,25 @@ import QuickAddCompanyModal from '../modals/QuickAddCompanyModal';
 import QuickAddContactModal from '../modals/QuickAddContactModal';
 import { LEAD_STATUS_OPTIONS } from '../../lib/utils';
 import { FormLabel, TextInput, SelectInput, TextareaInput, HelperText, ErrorText } from '../ui/Form';
-import Button from '../ui/Button';
 
 export interface LeadFormInitialData {
-        firstName?: string;
-        lastName?: string;
-        email?: string;
-        phone?: string;
-        company?: string;
-        companyId?: string | { _id?: string };
-        contactId?: string | { _id?: string };
-        source?: string;
-        status?: string;
-        dealValue?: string;
-        requirementSummary?: string;
-        lostReason?: string;
-        ownerId?: string | { _id?: string };
-        assignedTo?: string | { _id?: string };
-        nextFollowUpDate?: string;
-        nextFollowUpAt?: string;
-        followUpType?: string;
+    firstName?: string;
+    lastName?: string;
+    email?: string;
+    phone?: string;
+    company?: string;
+    companyId?: string | { _id?: string };
+    contactId?: string | { _id?: string };
+    source?: string;
+    status?: string;
+    dealValue?: string;
+    requirementSummary?: string;
+    lostReason?: string;
+    ownerId?: string | { _id?: string };
+    assignedTo?: string | { _id?: string };
+    nextFollowUpDate?: string;
+    nextFollowUpAt?: string;
+    followUpType?: string;
 }
 
 interface LeadFormProps {
@@ -50,13 +50,13 @@ interface LeadFormData {
     lostReason: string;
     ownerId: string;
     nextFollowUpAt: string;
-    followUpType: string;
+    followUpType: 'CALL' | 'WHATSAPP' | 'EMAIL' | 'MEETING' | '';
 }
 
 export type LeadFormPayload = LeadFormData & {
     contactId?: string;
     companyId?: string;
-    followUpType?: string;
+    followUpType?: 'CALL' | 'WHATSAPP' | 'EMAIL' | 'MEETING';
     nextFollowUpAt?: string;
 };
 
@@ -84,22 +84,23 @@ const LeadForm = ({ initialData, onSubmit, error }: LeadFormProps) => {
         email: initialData?.email || '',
         phone: initialData?.phone || '',
         company: initialData?.company || '',
-        companyId: initialData?.companyId || '',
-        contactId: initialData?.contactId || '',
+        companyId: (typeof initialData?.companyId === 'string' ? initialData?.companyId : initialData?.companyId?._id) || '',
+        contactId: (typeof initialData?.contactId === 'string' ? initialData?.contactId : initialData?.contactId?._id) || '',
         source: initialData?.source || 'Website',
         status: initialData?.status || 'New',
         dealValue: initialData?.dealValue || '',
         requirementSummary: initialData?.requirementSummary || '',
         lostReason: initialData?.lostReason || '',
-        ownerId: initialData?.ownerId?._id || initialData?.ownerId || initialData?.assignedTo?._id || initialData?.assignedTo || currentUserId || '',
+        ownerId: (initialData as any)?.ownerId?._id || (initialData as any)?.ownerId || (initialData as any)?.assignedTo?._id || (initialData as any)?.assignedTo || currentUserId || '',
         nextFollowUpAt: formatDateTimeLocal(initialData?.nextFollowUpDate || initialData?.nextFollowUpAt),
-        followUpType: initialData?.followUpType || ''
+        followUpType: (initialData?.followUpType as any) || ''
     });
 
     const [clientError, setClientError] = useState<string | null>(null);
     const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
     const [showCompanyModal, setShowCompanyModal] = useState(false);
     const [showContactModal, setShowContactModal] = useState(false);
+    
     const ownerOptions = userValue?.role === 'Admin'
         ? users
         : currentUserId
@@ -136,7 +137,6 @@ const LeadForm = ({ initialData, onSubmit, error }: LeadFormProps) => {
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
 
-        // Check if user selected "+ Add New" options
         if (name === 'companyId' && value === '__add_new__') {
             setShowCompanyModal(true);
             return;
@@ -181,12 +181,12 @@ const LeadForm = ({ initialData, onSubmit, error }: LeadFormProps) => {
             company: companyName,
             contactId: ''
         }));
-        dispatch(fetchCompanies({ limit: 100 })); // Refresh company list
+        dispatch(fetchCompanies({ limit: 100 }));
     };
 
     const handleContactCreated = (contactId: string) => {
         setFormData(prev => ({ ...prev, contactId }));
-        dispatch(fetchContacts({ companyId: formData.companyId, limit: 100 })); // Refresh contact list
+        dispatch(fetchContacts({ companyId: formData.companyId, limit: 100 }));
     };
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -216,347 +216,351 @@ const LeadForm = ({ initialData, onSubmit, error }: LeadFormProps) => {
 
         if (Object.keys(nextErrors).length > 0) {
             setFieldErrors(nextErrors);
-            setClientError('Please fix the highlighted fields.');
+            setClientError('Please complete the required fields before saving this lead.');
             return;
         }
 
         setClientError(null);
         setFieldErrors({});
-        const payload: LeadFormPayload = { ...formData };
-        if (!payload.contactId) {
-            delete payload.contactId;
-        }
-        if (!payload.companyId) {
-            delete payload.companyId;
-        }
-        if (!payload.followUpType) {
-            delete payload.followUpType;
-        }
-        if (!payload.nextFollowUpAt) {
-            delete payload.nextFollowUpAt;
-        }
+        const payload: any = { ...formData };
+        if (!payload.contactId) delete payload.contactId;
+        if (!payload.companyId) delete payload.companyId;
+        if (!payload.followUpType) delete payload.followUpType;
+        if (!payload.nextFollowUpAt) delete payload.nextFollowUpAt;
+        
         onSubmit(payload);
     };
 
     return (
         <>
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <form onSubmit={handleSubmit} className="space-y-10">
                 {(error || clientError) && (
-                    <div className="alert-error">
+                    <div className="flex items-center gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700 tt-animate-shake">
+                        <AlertCircle size={18} />
                         {error || clientError}
                     </div>
                 )}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Basic Information */}
-                    <div>
-                        <FormLabel>
-                            First Name <span className="text-red-500">*</span>
-                        </FormLabel>
-                        <TextInput
-                            type="text"
-                            name="firstName"
-                            value={formData.firstName}
-                            onChange={handleChange}
-                            required
-                            placeholder="John"
-                        />
-                        {fieldErrors.firstName && (
-                            <ErrorText>{fieldErrors.firstName}</ErrorText>
-                        )}
-                    </div>
 
-                    <div>
-                        <FormLabel>
-                            Last Name <span className="text-red-500">*</span>
-                        </FormLabel>
-                        <TextInput
-                            type="text"
-                            name="lastName"
-                            value={formData.lastName}
-                            onChange={handleChange}
-                            required
-                            placeholder="Doe"
-                        />
-                        {fieldErrors.lastName && (
-                            <ErrorText>{fieldErrors.lastName}</ErrorText>
-                        )}
-                    </div>
-
-                    <div>
-                        <FormLabel>
-                            Email <span className="text-red-500">*</span>
-                        </FormLabel>
-                        <TextInput
-                            type="email"
-                            name="email"
-                            value={formData.email}
-                            onChange={handleChange}
-                            required
-                            placeholder="john@example.com"
-                        />
-                        {fieldErrors.email && (
-                            <ErrorText>{fieldErrors.email}</ErrorText>
-                        )}
-                    </div>
-
-                    <div>
-                        <FormLabel>
-                            Phone <span className="text-red-500">*</span>
-                        </FormLabel>
-                        <TextInput
-                            type="tel"
-                            name="phone"
-                            value={formData.phone}
-                            onChange={handleChange}
-                            required
-                            placeholder="+91 1234567890"
-                        />
-                        {fieldErrors.phone && (
-                            <ErrorText>{fieldErrors.phone}</ErrorText>
-                        )}
-                    </div>
-
-                    <div>
-                        <FormLabel>
-                            Company Name <span className="text-red-500">*</span>
-                        </FormLabel>
-                        <TextInput
-                            type="text"
-                            name="company"
-                            value={formData.company}
-                            onChange={handleChange}
-                            required
-                            placeholder="Acme Corp"
-                        />
-                        {fieldErrors.company && (
-                            <ErrorText>{fieldErrors.company}</ErrorText>
-                        )}
-                    </div>
-
-                    {/* Company Selection from Database */}
-                    <div>
-                        <FormLabel>
-                            Link to Company (Database)
-                        </FormLabel>
-                        <SelectInput
-                            name="companyId"
-                            value={formData.companyId}
-                            onChange={handleChange}
-                        >
-                            <option value="">Select Company</option>
-                            <option value="__add_new__" className="text-brand-400 font-medium">+ Add New Company</option>
-                            {companies.map((company) => (
-                                <option key={company._id} value={company._id}>
-                                    {company.name}
-                                </option>
-                            ))}
-                        </SelectInput>
-                        <HelperText>Select existing or add new company</HelperText>
-                    </div>
-
-                    {/* Contact Selection (filtered by company) */}
-                    <div>
-                        <FormLabel>
-                            Primary Contact
-                        </FormLabel>
-                        <SelectInput
-                            name="contactId"
-                            value={formData.contactId}
-                            onChange={handleChange}
-                            disabled={!formData.companyId}
-                            className="disabled:opacity-60 disabled:bg-secondary-900/60"
-                        >
-                            <option value="">Select Contact</option>
-                            {formData.companyId && <option value="__add_new__" className="text-brand-400 font-medium">+ Add New Contact</option>}
-                            {contacts.map((contact) => (
-                                <option key={contact._id} value={contact._id}>
-                                    {contact.firstName} {contact.lastName} - {contact.designation || 'N/A'}
-                                </option>
-                            ))}
-                        </SelectInput>
-                        <HelperText>Select company first to load contacts</HelperText>
-                    </div>
-
-                    <div>
-                        <FormLabel>
-                            Owner <span className="text-red-500">*</span>
-                        </FormLabel>
-                        <SelectInput
-                            name="ownerId"
-                            value={formData.ownerId}
-                            onChange={handleChange}
-                        >
-                            <option value="">Select Owner</option>
-                            {ownerOptions.map((owner) => (
-                                <option key={owner._id} value={owner._id}>
-                                    {owner.firstName} {owner.lastName}
-                                </option>
-                            ))}
-                        </SelectInput>
-                        {fieldErrors.ownerId && (
-                            <ErrorText>{fieldErrors.ownerId}</ErrorText>
-                        )}
-                    </div>
-
-                    <div>
-                        <FormLabel>
-                            Next Follow-up <span className="text-red-500">*</span>
-                        </FormLabel>
-                        <TextInput
-                            type="datetime-local"
-                            name="nextFollowUpAt"
-                            value={formData.nextFollowUpAt}
-                            onChange={handleChange}
-                        />
-                        {fieldErrors.nextFollowUpAt && (
-                            <ErrorText>{fieldErrors.nextFollowUpAt}</ErrorText>
-                        )}
-                        {initialData && !formData.nextFollowUpAt && (
-                            <HelperText>Legacy lead: schedule a follow-up to improve lead health.</HelperText>
-                        )}
-                    </div>
-
-                    <div>
-                        <FormLabel>Follow-up Type</FormLabel>
-                        <SelectInput
-                            name="followUpType"
-                            value={formData.followUpType}
-                            onChange={handleChange}
-                        >
-                            <option value="">Select Type</option>
-                            <option value="CALL">Call</option>
-                            <option value="WHATSAPP">WhatsApp</option>
-                            <option value="EMAIL">Email</option>
-                            <option value="MEETING">Meeting</option>
-                        </SelectInput>
-                    </div>
-
-                    <div>
-                        <FormLabel>Source</FormLabel>
-                        <SelectInput
-                            name="source"
-                            value={formData.source}
-                            onChange={handleChange}
-                        >
-                            <option value="Website">Website</option>
-                            <option value="Referral">Referral</option>
-                            <option value="Cold Call">Cold Call</option>
-                            <option value="LinkedIn">LinkedIn</option>
-                            <option value="Email Campaign">Email Campaign</option>
-                            <option value="Trade Show">Trade Show</option>
-                            <option value="Partner">Partner</option>
-                            <option value="JustDial">JustDial</option>
-                            <option value="Other">Other</option>
-                        </SelectInput>
-                        {fieldErrors.source && (
-                            <ErrorText>{fieldErrors.source}</ErrorText>
-                        )}
-                    </div>
-
-                    <div>
-                        <FormLabel>Status</FormLabel>
-                        <SelectInput
-                            name="status"
-                            value={formData.status}
-                            onChange={handleChange}
-                        >
-                            {LEAD_STATUS_OPTIONS.map((status) => (
-                                <option key={status} value={status}>
-                                    {status}
-                                </option>
-                            ))}
-                        </SelectInput>
-                        {fieldErrors.status && (
-                            <ErrorText>{fieldErrors.status}</ErrorText>
-                        )}
-                    </div>
-
-                    <div>
-                        <FormLabel>Deal Value</FormLabel>
-                        <TextInput
-                            type="number"
-                            name="dealValue"
-                            value={formData.dealValue}
-                            onChange={handleChange}
-                            placeholder="50000"
-                        />
-                    </div>
-
-                    {formData.status === 'Lost' && (
-                        <div className="md:col-span-2">
-                            <FormLabel>
-                                Lost Reason <span className="text-red-500">*</span>
-                            </FormLabel>
-                            <TextareaInput
-                                name="lostReason"
-                                value={formData.lostReason}
-                                onChange={handleChange}
-                                rows={3}
-                                placeholder="Why was the lead lost?"
-                            />
-                            {fieldErrors.lostReason && (
-                                <ErrorText>{fieldErrors.lostReason}</ErrorText>
-                            )}
+                <div className="space-y-6">
+                    <div className="flex items-center gap-3">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-2xl border border-sky-100 bg-sky-50 text-sky-600">
+                            <User size={16} />
                         </div>
-                    )}
-
-                    {/* Requirement Summary - Full Width */}
-                    <div className="md:col-span-2">
-                        <FormLabel>
-                            Requirement Summary
-                        </FormLabel>
-                        <TextareaInput
-                            name="requirementSummary"
-                            value={formData.requirementSummary}
-                            onChange={handleChange}
-                            rows={4}
-                            placeholder="Describe the client's requirements, pain points, and expectations..."
-                        />
-                        <HelperText>Detailed description of what the client needs</HelperText>
+                        <div>
+                            <h3 className="text-sm font-extrabold uppercase tracking-[0.22em] text-slate-900">Lead details</h3>
+                            <p className="text-xs text-slate-500">Core contact information for the lead record.</p>
+                        </div>
                     </div>
 
+                    <div className="grid grid-cols-1 gap-6 rounded-[1.75rem] border border-slate-200 bg-slate-50/70 p-6 md:grid-cols-2 md:p-8">
+                        <div>
+                            <FormLabel className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">First Name <span className="text-sky-600">*</span></FormLabel>
+                            <TextInput
+                                type="text"
+                                name="firstName"
+                                value={formData.firstName}
+                                onChange={handleChange}
+                                placeholder="Enter first name"
+                                className="h-12 rounded-xl border-slate-200 bg-white focus:border-sky-500"
+                            />
+                            {fieldErrors.firstName && <ErrorText className="mt-1 text-xs">{fieldErrors.firstName}</ErrorText>}
+                        </div>
+
+                        <div>
+                            <FormLabel className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Last Name <span className="text-sky-600">*</span></FormLabel>
+                            <TextInput
+                                type="text"
+                                name="lastName"
+                                value={formData.lastName}
+                                onChange={handleChange}
+                                placeholder="Enter last name"
+                                className="h-12 rounded-xl border-slate-200 bg-white focus:border-sky-500"
+                            />
+                            {fieldErrors.lastName && <ErrorText className="mt-1 text-xs">{fieldErrors.lastName}</ErrorText>}
+                        </div>
+
+                        <div>
+                            <FormLabel className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                <Mail size={12} className="text-sky-500" />
+                                Email <span className="text-sky-600">*</span>
+                            </FormLabel>
+                            <TextInput
+                                type="email"
+                                name="email"
+                                value={formData.email}
+                                onChange={handleChange}
+                                placeholder="john@nexus.com"
+                                className="h-12 rounded-xl border-slate-200 bg-white focus:border-sky-500"
+                            />
+                            {fieldErrors.email && <ErrorText className="mt-1 text-xs">{fieldErrors.email}</ErrorText>}
+                        </div>
+
+                        <div>
+                            <FormLabel className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                <Phone size={12} className="text-sky-500" />
+                                Phone <span className="text-sky-600">*</span>
+                            </FormLabel>
+                            <TextInput
+                                type="tel"
+                                name="phone"
+                                value={formData.phone}
+                                onChange={handleChange}
+                                placeholder="+91 00000 00000"
+                                className="h-12 rounded-xl border-slate-200 bg-white focus:border-sky-500"
+                            />
+                            {fieldErrors.phone && <ErrorText className="mt-1 text-xs">{fieldErrors.phone}</ErrorText>}
+                        </div>
+                    </div>
                 </div>
 
-                {/* Form Actions */}
-                <div className="form-actions">
-                    <Button
+                <div className="space-y-6">
+                    <div className="flex items-center gap-3">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-2xl border border-indigo-100 bg-indigo-50 text-indigo-600">
+                            <Building2 size={16} />
+                        </div>
+                        <div>
+                            <h3 className="text-sm font-extrabold uppercase tracking-[0.22em] text-slate-900">Company context</h3>
+                            <p className="text-xs text-slate-500">Link the lead to the right organization and contact.</p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-6 rounded-[1.75rem] border border-slate-200 bg-slate-50/70 p-6 md:grid-cols-2 md:p-8">
+                        <div className="md:col-span-2">
+                            <FormLabel className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                <Briefcase size={12} className="text-indigo-500" />
+                                Company name <span className="text-sky-600">*</span>
+                            </FormLabel>
+                            <TextInput
+                                type="text"
+                                name="company"
+                                value={formData.company}
+                                onChange={handleChange}
+                                placeholder="Corporate Entity Name"
+                                className="h-12 rounded-xl border-slate-200 bg-white focus:border-indigo-500"
+                            />
+                            {fieldErrors.company && <ErrorText className="mt-1 text-xs">{fieldErrors.company}</ErrorText>}
+                        </div>
+
+                        <div>
+                            <FormLabel className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Existing company</FormLabel>
+                            <SelectInput
+                                name="companyId"
+                                value={formData.companyId}
+                                onChange={handleChange}
+                                className="h-12 rounded-xl border-slate-200 bg-white font-medium text-slate-700 focus:border-indigo-500"
+                            >
+                                <option value="">Select company</option>
+                                <option value="__add_new__" className="text-indigo-600 font-semibold">+ Add new company</option>
+                                {companies.map((company) => (
+                                    <option key={company._id} value={company._id}>{company.name}</option>
+                                ))}
+                            </SelectInput>
+                            <HelperText className="mt-1 text-xs text-slate-500">Link the lead to an existing company record.</HelperText>
+                        </div>
+
+                        <div>
+                            <FormLabel className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Primary contact</FormLabel>
+                            <SelectInput
+                                name="contactId"
+                                value={formData.contactId}
+                                onChange={handleChange}
+                                disabled={!formData.companyId}
+                                className="h-12 rounded-xl border-slate-200 bg-white font-medium text-slate-700 focus:border-indigo-500 disabled:opacity-50"
+                            >
+                                <option value="">Select Contact</option>
+                                {formData.companyId && <option value="__add_new__" className="text-indigo-600 font-semibold">+ Add new contact</option>}
+                                {contacts.map((contact) => (
+                                    <option key={contact._id} value={contact._id}>{contact.firstName} {contact.lastName}</option>
+                                ))}
+                            </SelectInput>
+                            <HelperText className="mt-1 text-xs text-slate-500">Optional, but useful for communication history and outreach.</HelperText>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="space-y-6">
+                    <div className="flex items-center gap-3">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-2xl border border-cyan-100 bg-cyan-50 text-cyan-600">
+                            <MousePointer2 size={16} />
+                        </div>
+                        <div>
+                            <h3 className="text-sm font-extrabold uppercase tracking-[0.22em] text-slate-900">Pipeline settings</h3>
+                            <p className="text-xs text-slate-500">Define source, stage, owner, and the next follow-up.</p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-6 rounded-[1.75rem] border border-slate-200 bg-slate-50/70 p-6 md:grid-cols-2 lg:grid-cols-3 md:p-8">
+                        <div>
+                            <FormLabel className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Lead source <span className="text-sky-600">*</span></FormLabel>
+                            <SelectInput
+                                name="source"
+                                value={formData.source}
+                                onChange={handleChange}
+                                className="h-12 rounded-xl border-slate-200 bg-white font-medium focus:border-cyan-500"
+                            >
+                                <option value="Website">Website</option>
+                                <option value="Referral">Referral</option>
+                                <option value="Cold Call">Cold Call</option>
+                                <option value="LinkedIn">LinkedIn</option>
+                                <option value="Email Campaign">Email Campaign</option>
+                                <option value="Trade Show">Trade Show</option>
+                                <option value="Partner">Partner</option>
+                                <option value="JustDial">JustDial</option>
+                                <option value="Other">Other</option>
+                            </SelectInput>
+                        </div>
+
+                        <div>
+                            <FormLabel className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Lead status <span className="text-sky-600">*</span></FormLabel>
+                            <SelectInput
+                                name="status"
+                                value={formData.status}
+                                onChange={handleChange}
+                                className="h-12 rounded-xl border-slate-200 bg-white font-medium focus:border-cyan-500"
+                            >
+                                {LEAD_STATUS_OPTIONS.map((status) => (
+                                    <option key={status} value={status}>{status}</option>
+                                ))}
+                            </SelectInput>
+                        </div>
+
+                        <div>
+                            <FormLabel className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Estimated deal value</FormLabel>
+                            <div className="relative">
+                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>
+                                <TextInput
+                                    type="number"
+                                    name="dealValue"
+                                    value={formData.dealValue}
+                                    onChange={handleChange}
+                                    placeholder="0.00"
+                                    className="h-12 rounded-xl border-slate-200 bg-white pl-10 focus:border-cyan-500"
+                                />
+                            </div>
+                        </div>
+
+                        <div>
+                            <FormLabel className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                <ShieldCheck size={12} className="text-cyan-500" />
+                                Lead owner <span className="text-sky-600">*</span>
+                            </FormLabel>
+                            <SelectInput
+                                name="ownerId"
+                                value={formData.ownerId}
+                                onChange={handleChange}
+                                className="h-12 rounded-xl border-slate-200 bg-white font-medium focus:border-cyan-500"
+                            >
+                                <option value="">Select owner</option>
+                                {ownerOptions.map((owner) => (
+                                    <option key={owner._id} value={owner._id}>{owner.firstName} {owner.lastName}</option>
+                                ))}
+                            </SelectInput>
+                            {fieldErrors.ownerId && <ErrorText className="mt-1 text-xs">{fieldErrors.ownerId}</ErrorText>}
+                        </div>
+
+                        <div>
+                            <FormLabel className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                <Calendar size={12} className="text-cyan-500" />
+                                Next follow-up <span className="text-sky-600">*</span>
+                            </FormLabel>
+                            <TextInput
+                                type="datetime-local"
+                                name="nextFollowUpAt"
+                                value={formData.nextFollowUpAt}
+                                onChange={handleChange}
+                                className="h-12 rounded-xl border-slate-200 bg-white font-medium text-slate-900 focus:border-cyan-500"
+                            />
+                            {fieldErrors.nextFollowUpAt && <ErrorText className="mt-1 text-xs">{fieldErrors.nextFollowUpAt}</ErrorText>}
+                        </div>
+
+                        <div>
+                            <FormLabel className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Follow-up type</FormLabel>
+                            <SelectInput
+                                name="followUpType"
+                                value={formData.followUpType}
+                                onChange={handleChange}
+                                className="h-12 rounded-xl border-slate-200 bg-white font-medium focus:border-cyan-500"
+                            >
+                                <option value="">Select type</option>
+                                <option value="CALL">Call</option>
+                                <option value="WHATSAPP">WhatsApp</option>
+                                <option value="EMAIL">Email</option>
+                                <option value="MEETING">Meeting</option>
+                            </SelectInput>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="space-y-6">
+                    <div className="flex items-center gap-3">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-2xl border border-slate-200 bg-slate-100 text-slate-600">
+                            <Info size={16} />
+                        </div>
+                        <div>
+                            <h3 className="text-sm font-extrabold uppercase tracking-[0.22em] text-slate-900">Notes and summary</h3>
+                            <p className="text-xs text-slate-500">Capture context that helps the next conversation.</p>
+                        </div>
+                    </div>
+
+                    <div className="space-y-6 rounded-[1.75rem] border border-slate-200 bg-slate-50/70 p-6 md:p-8">
+                        {formData.status === 'Lost' && (
+                            <div className="tt-animate-fade-up">
+                                <FormLabel className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-rose-600">Lost reason <span className="text-rose-600">*</span></FormLabel>
+                                <TextareaInput
+                                    name="lostReason"
+                                    value={formData.lostReason}
+                                    onChange={handleChange}
+                                    rows={3}
+                                    placeholder="Capture why this lead was marked lost."
+                                    className="rounded-2xl border-rose-200 bg-white p-4 font-medium focus:border-rose-500"
+                                />
+                                {fieldErrors.lostReason && <ErrorText className="mt-1 text-xs">{fieldErrors.lostReason}</ErrorText>}
+                            </div>
+                        )}
+
+                        <div>
+                            <FormLabel className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Requirement summary</FormLabel>
+                            <TextareaInput
+                                name="requirementSummary"
+                                value={formData.requirementSummary}
+                                onChange={handleChange}
+                                rows={6}
+                                placeholder="Summarize the lead requirements, scope, or conversation highlights."
+                                className="rounded-2xl border-slate-200 bg-white p-5 font-medium leading-relaxed shadow-sm focus:border-sky-500"
+                            />
+                            <HelperText className="mt-2 text-xs text-slate-500">Use this for qualification notes, objections, and handoff context.</HelperText>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="sticky bottom-0 z-10 -mx-8 -mb-8 flex items-center justify-between gap-6 border-t border-slate-200 bg-white/90 p-6 backdrop-blur md:-mx-10 md:-mb-10 md:p-8">
+                    <button
                         type="button"
                         onClick={() => window.history.back()}
-                        variant="outline"
+                        className="rounded-2xl px-6 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
                     >
                         Cancel
-                    </Button>
-                    <Button
-                        type="submit"
-                        disabled={loading}
-                        variant="primary"
-                    >
-                        {loading ? 'Saving...' : initialData ? 'Update Lead' : 'Create Lead'}
-                    </Button>
+                    </button>
+                    <div className="flex items-center gap-4">
+                        <button
+                            type="submit"
+                            disabled={loading}
+                            className="group relative rounded-2xl bg-slate-900 px-8 py-3.5 text-xs font-semibold uppercase tracking-[0.2em] text-white shadow-xl shadow-slate-900/10 transition hover:bg-sky-600 active:scale-95 disabled:opacity-50"
+                        >
+                            <span className="relative z-10 flex items-center gap-3">
+                                {loading ? 'Saving...' : initialData ? 'Update lead' : 'Create lead'}
+                                {!loading && <ShieldCheck size={18} className="text-sky-300 transition-colors group-hover:text-white" />}
+                            </span>
+                        </button>
+                    </div>
                 </div>
             </form>
 
-            {/* Quick Add Modals */}
-            {
-                showCompanyModal && (
-                    <QuickAddCompanyModal
-                        onClose={() => setShowCompanyModal(false)}
-                        onSuccess={handleCompanyCreated}
-                    />
-                )
-            }
-
-            {
-                showContactModal && (
-                    <QuickAddContactModal
-                        onClose={() => setShowContactModal(false)}
-                        onSuccess={handleContactCreated}
-                        preSelectedCompanyId={formData.companyId}
-                    />
-                )
-            }
+            {showCompanyModal && <QuickAddCompanyModal onClose={() => setShowCompanyModal(false)} onSuccess={handleCompanyCreated} />}
+            {showContactModal && <QuickAddContactModal onClose={() => setShowContactModal(false)} onSuccess={handleContactCreated} preSelectedCompanyId={formData.companyId} />}
         </>
     );
 };
 
 export default LeadForm;
+

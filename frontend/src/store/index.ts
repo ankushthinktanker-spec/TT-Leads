@@ -9,6 +9,11 @@ import userReducer from './slices/userSlice';
 import settingsReducer from './slices/settingsSlice';
 import analyticsReducer from './slices/analyticsSlice';
 import reportsReducer from './slices/reportsSlice';
+import dealReducer from './slices/dealSlice';
+import pipelineReducer from './slices/pipelineSlice';
+import contractReducer from './slices/contractSlice';
+import invoiceReducer from './slices/invoiceSlice';
+import subscriptionReducer from './slices/subscriptionSlice';
 
 export const store = configureStore({
     reducer: {
@@ -22,6 +27,11 @@ export const store = configureStore({
         settings: settingsReducer,
         analytics: analyticsReducer,
         reports: reportsReducer,
+        deals: dealReducer,
+        pipelines: pipelineReducer,
+        contracts: contractReducer,
+        invoices: invoiceReducer,
+        subscriptions: subscriptionReducer,
     },
 });
 

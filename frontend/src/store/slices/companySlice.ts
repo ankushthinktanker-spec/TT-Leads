@@ -62,6 +62,8 @@ export const fetchCompanies = createAsyncThunk(
         industry?: string;
         companySize?: string;
         status?: string;
+        sortBy?: string;
+        sortOrder?: 'asc' | 'desc';
     } = {}) => {
         const response = await api.get('/companies', { params });
         return response.data;
@@ -116,8 +118,15 @@ const companySlice = createSlice({
         });
         builder.addCase(fetchCompanies.fulfilled, (state, action) => {
             state.loading = false;
-            state.companies = action.payload.data.companies;
-            state.pagination = action.payload.data.pagination;
+            const data = action.payload?.data || {};
+            const meta = data.meta || action.payload?.pagination || {};
+            state.companies = data.items || data.companies || [];
+            state.pagination = {
+                page: meta?.page ?? 1,
+                limit: meta?.limit ?? 10,
+                total: meta?.totalItems ?? meta?.total ?? 0,
+                pages: meta?.totalPages ?? meta?.pages ?? 0
+            };
         });
         builder.addCase(fetchCompanies.rejected, (state, action) => {
             state.loading = false;

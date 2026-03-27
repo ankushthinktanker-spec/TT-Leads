@@ -1,6 +1,7 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
-interface ILeadStageHistory extends Document {
+export interface ILeadStageHistory extends Document {
+    tenantId: mongoose.Types.ObjectId;
     leadId: mongoose.Types.ObjectId;
     fromStatus?: string;
     toStatus: string;
@@ -10,6 +11,12 @@ interface ILeadStageHistory extends Document {
 
 const leadStageHistorySchema = new Schema<ILeadStageHistory>(
     {
+        tenantId: {
+            type: Schema.Types.ObjectId,
+            ref: 'Tenant',
+            required: [true, 'Tenant ID is required for lead stage history isolation'],
+            index: true
+        },
         leadId: {
             type: Schema.Types.ObjectId,
             ref: 'Lead',
@@ -43,7 +50,7 @@ const leadStageHistorySchema = new Schema<ILeadStageHistory>(
     }
 );
 
-leadStageHistorySchema.index({ leadId: 1, changedAt: -1 });
+leadStageHistorySchema.index({ tenantId: 1, leadId: 1, changedAt: -1 });
 
 const LeadStageHistory = mongoose.model<ILeadStageHistory>('LeadStageHistory', leadStageHistorySchema);
 

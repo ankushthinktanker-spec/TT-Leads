@@ -23,7 +23,7 @@ const getHealthClasses = (health: string) => {
         case 'SCHEDULED':
             return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
         default:
-            return 'bg-secondary-800/80 text-secondary-300 border-white/5';
+            return 'bg-slate-100 text-slate-700 border-slate-200';
     }
 };
 
@@ -37,3 +37,5 @@ const LeadHealthBadge = ({ lead, className = '' }: { lead: Lead; className?: str
 };
 
 export default LeadHealthBadge;
+
+

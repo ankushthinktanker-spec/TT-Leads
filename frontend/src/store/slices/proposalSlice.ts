@@ -7,7 +7,7 @@ interface ProposalSection {
     title?: string;
     sectionTitle?: string;
     content: string;
-    contentType?: 'richText' | 'table' | 'mixed';
+    contentType?: 'richText' | 'table' | 'mixed' | 'RichText' | 'Table' | 'Mixed';
     sectionType?: 'RichText' | 'Table' | 'Mixed' | 'richText' | 'table' | 'mixed';
     order?: number;
     sectionOrder?: number;
@@ -20,7 +20,12 @@ interface Proposal {
     _id: string;
     proposalNumber: string;
     title: string;
-    leadId?: string;
+    leadId?: string | {
+        _id: string;
+        firstName?: string;
+        lastName?: string;
+        email?: string;
+    };
     companyId?: string;
     contactId?: string;
     clientName?: string;
@@ -85,11 +90,11 @@ interface ProposalState {
 }
 
 interface ProposalListPayload {
-    proposals?: Proposal[];
-    pagination: {
-        total?: number;
+    items?: Proposal[];
+    meta?: {
+        totalItems?: number;
         page?: number;
-        pages?: number;
+        totalPages?: number;
         limit?: number;
     };
 }
@@ -137,6 +142,8 @@ export const fetchProposals = createAsyncThunk(
         status?: string;
         leadId?: string;
         search?: string;
+        sortBy?: string;
+        sortOrder?: 'asc' | 'desc';
     } = {}) => {
         const response = await api.get('/proposals', { params });
         return response.data;
@@ -191,6 +198,16 @@ export const generateProposalPDF = createAsyncThunk(
     }
 );
 
+export const sendProposalByEmail = createAsyncThunk(
+    'proposals/sendByEmail',
+    async (
+        { id, to, message }: { id: string; to: string; message: string }
+    ) => {
+        const response = await api.post(`/proposals/${id}/send`, { to, message });
+        return response.data;
+    }
+);
+
 const addSection = createAsyncThunk(
     'proposals/addSection',
     async ({ proposalId, section }: { proposalId: string; section: Partial<ProposalSection> }) => {
@@ -237,12 +254,19 @@ const proposalSlice = createSlice({
             })
             .addCase(fetchProposals.fulfilled, (state, action: PayloadAction<{ data: ProposalListPayload }>) => {
                 state.loading = false;
-                state.proposals = action.payload.data.proposals || [];
+                const data = (action.payload?.data || {}) as ProposalListPayload & {
+                    proposals?: Proposal[];
+                };
+                const meta = (data.meta || (action.payload as { pagination?: ProposalListPayload['meta'] })?.pagination || {}) as ProposalListPayload['meta'] & {
+                    total?: number;
+                    pages?: number;
+                };
+                state.proposals = data.items || data.proposals || [];
                 state.pagination = {
-                    total: action.payload.data.pagination.total || 0,
-                    page: action.payload.data.pagination.page || 1,
-                    pages: action.payload.data.pagination.pages || 1,
-                    limit: action.payload.data.pagination.limit || 10,
+                    total: meta?.totalItems || meta?.total || 0,
+                    page: meta?.page || 1,
+                    pages: meta?.totalPages || meta?.pages || 1,
+                    limit: meta?.limit || 10,
                 };
             })
             .addCase(fetchProposals.rejected, (state, action) => {

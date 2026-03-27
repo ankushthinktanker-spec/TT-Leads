@@ -1,4 +1,4 @@
-import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
+import axios, { AxiosError, AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios';
 import {
     getAccessToken,
     getRefreshToken,
@@ -17,6 +17,11 @@ const api = axios.create({
 });
 
 type AuthRequestConfig = InternalAxiosRequestConfig & {
+    _skipAuth?: boolean;
+    _retry?: boolean;
+};
+
+export type ApiRequestConfig = AxiosRequestConfig & {
     _skipAuth?: boolean;
     _retry?: boolean;
 };
@@ -41,7 +46,10 @@ const refreshAccessToken = async (): Promise<string | null> => {
             }
             return null;
         })
-        .catch(() => null)
+        .catch(() => {
+            clearAuthStorage();
+            return null;
+        })
         .finally(() => {
             refreshPromise = null;
         });
@@ -55,6 +63,12 @@ api.interceptors.request.use(
         if (config._skipAuth) {
             return config;
         }
+
+        const isAuthRoute = typeof config.url === 'string' && config.url.startsWith('/auth/');
+        if (isAuthRoute) {
+            return config;
+        }
+
         let token = getAccessToken();
         if (token && isTokenExpired(token)) {
             token = await refreshAccessToken();
@@ -77,6 +91,12 @@ api.interceptors.response.use(
     async (error: AxiosError) => {
         const originalRequest = (error.config || {}) as AuthRequestConfig;
         if (error.response?.status === 401 && !originalRequest._retry) {
+            const isAuthRoute = typeof originalRequest.url === 'string' && originalRequest.url.startsWith('/auth/');
+            if (isAuthRoute) {
+                clearAuthStorage();
+                return Promise.reject(error);
+            }
+
             originalRequest._retry = true;
             const token = await refreshAccessToken();
             if (token) {

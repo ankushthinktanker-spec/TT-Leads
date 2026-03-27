@@ -5,13 +5,11 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAppDispatch, useAppSelector } from '../../hooks/redux';
 import { createCompany, updateCompany, fetchCompany, clearCurrentCompany } from '../../store/slices/companySlice';
-import MainLayout from '../../components/layout/MainLayout';
-import { ArrowLeft, Building2 } from 'lucide-react';
+import { ArrowLeft, Building2, Sparkles } from 'lucide-react';
 import PageLayout from '../ui/PageLayout';
-import PageHeader from '../ui/PageHeader';
-import SurfaceCard from '../ui/SurfaceCard';
 import Button from '../ui/Button';
 import { FormLabel, TextInput, SelectInput, ErrorText, HelperText } from '../ui/Form';
+import WorkspaceSection from '../ui/WorkspaceSection';
 
 const companySchema = z.object({
     name: z.string().min(1, 'Company name is required'),
@@ -94,32 +92,73 @@ const CompanyForm = () => {
     };
 
     return (
-        <MainLayout>
+        <>
             <PageLayout>
                 <div className="mb-4">
                     <button
                         onClick={() => navigate('/companies')}
-                        className="flex items-center text-secondary-400 hover:text-secondary-200"
+                        className="flex items-center text-slate-600 hover:text-slate-900"
                     >
                         <ArrowLeft size={20} className="mr-2" />
                         Back to Companies
                     </button>
                 </div>
 
-                <PageHeader
-                    title={isEditMode ? 'Edit Company' : 'Add New Company'}
-                    subtitle={isEditMode ? 'Update company information' : 'Create a new company record'}
-                    actions={(
-                        <div className="p-3 bg-brand-500/10 rounded-lg hidden lg:flex">
-                            <Building2 className="text-brand-400" size={24} />
+                <div className="workspace-hero relative overflow-hidden p-7">
+                    <div className="absolute inset-y-0 right-0 w-1/2 bg-[radial-gradient(circle_at_top_right,rgba(20,184,166,0.14),transparent_66%)]" />
+                    <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="max-w-3xl">
+                            <div className="mb-3 flex items-center gap-3">
+                                <span className="rounded-full bg-white/90 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-sky-700 shadow-sm">
+                                    {isEditMode ? 'Edit company' : 'New company'}
+                                </span>
+                                <span className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
+                                    Account record management
+                                </span>
+                            </div>
+                            <h1 className="text-3xl font-extrabold tracking-tight text-slate-950 md:text-4xl">
+                                {isEditMode ? 'Keep account data current and clean.' : 'Create a company record your team can trust.'}
+                            </h1>
+                            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 md:text-[15px]">
+                                {isEditMode
+                                    ? 'Update ownership context, contact channels, and business profile data without disrupting the current CRM workflow.'
+                                    : 'Capture the core company profile, contact details, and business identifiers before linking leads and contacts.'}
+                            </p>
+                            <div className="mt-4 flex flex-wrap items-center gap-2">
+                                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-600">
+                                    Company profile
+                                </span>
+                                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-600">
+                                    Contact channels
+                                </span>
+                                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-600">
+                                    Compliance data
+                                </span>
+                            </div>
                         </div>
-                    )}
-                />
+                        <div className="flex items-center gap-3 rounded-[1.5rem] border border-white/70 bg-white/85 px-5 py-4 shadow-sm">
+                            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-sky-50 text-sky-600">
+                                <Building2 size={28} />
+                            </div>
+                            <div>
+                                <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-600">
+                                    <Sparkles size={12} />
+                                    CRM account
+                                </div>
+                                <p className="mt-1 text-sm font-semibold text-slate-900">{isEditMode ? 'Company update workspace' : 'Company creation workspace'}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
-                <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 mt-6">
-                    <SurfaceCard className="p-6 space-y-4">
-                        <h2 className="text-lg font-semibold text-secondary-50">Basic Information</h2>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <form onSubmit={handleSubmit(onSubmit)} className="mt-5 space-y-5">
+                    <WorkspaceSection
+                        title="Basic information"
+                        description="Define the account identity, market context, and lifecycle status your team will use across the CRM."
+                        eyebrow="Account profile"
+                        aside={<><Building2 size={16} className="text-brand-500" /> Company record</>}
+                    >
+                        <div className="workspace-form-grid workspace-form-grid--compact">
                             <div className="md:col-span-2">
                                 <FormLabel>
                                     Company Name <span className="text-red-500">*</span>
@@ -174,11 +213,14 @@ const CompanyForm = () => {
                                 </SelectInput>
                             </div>
                         </div>
-                    </SurfaceCard>
+                    </WorkspaceSection>
 
-                    <SurfaceCard className="p-6 space-y-4">
-                        <h2 className="text-lg font-semibold text-secondary-50">Contact Information</h2>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <WorkspaceSection
+                        title="Contact information"
+                        description="Keep the primary contact channels and mailing address clean so downstream workflows stay accurate."
+                        eyebrow="Reachability"
+                    >
+                        <div className="workspace-form-grid workspace-form-grid--compact">
                             <div>
                                 <FormLabel>Email</FormLabel>
                                 <TextInput
@@ -237,11 +279,14 @@ const CompanyForm = () => {
                                 />
                             </div>
                         </div>
-                    </SurfaceCard>
+                    </WorkspaceSection>
 
-                    <SurfaceCard className="p-6 space-y-4">
-                        <h2 className="text-lg font-semibold text-secondary-50">Business Information</h2>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <WorkspaceSection
+                        title="Business identifiers"
+                        description="Capture tax and registration identifiers for proposals, invoicing, and downstream operations."
+                        eyebrow="Compliance data"
+                    >
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                             <div>
                                 <FormLabel>GST Number</FormLabel>
                                 <TextInput
@@ -266,18 +311,22 @@ const CompanyForm = () => {
                                 />
                             </div>
                         </div>
-                    </SurfaceCard>
+                    </WorkspaceSection>
 
-                    <SurfaceCard className="p-6 space-y-2">
+                    <WorkspaceSection
+                        title="Classification tags"
+                        description="Use lightweight tags to organize segments, ownership groups, or strategic account clusters."
+                        eyebrow="Segmentation"
+                    >
                         <FormLabel>Tags</FormLabel>
                         <TextInput
                             {...register('tags')}
                             placeholder="Enter tags separated by commas"
                         />
                         <HelperText>Separate tags with commas</HelperText>
-                    </SurfaceCard>
+                    </WorkspaceSection>
 
-                    <SurfaceCard className="p-6">
+                    <div className="workspace-section px-6 py-6 lg:px-8">
                         <div className="form-actions">
                             <Button
                                 type="button"
@@ -294,10 +343,10 @@ const CompanyForm = () => {
                                 {loading ? 'Saving...' : isEditMode ? 'Update Company' : 'Create Company'}
                             </Button>
                         </div>
-                    </SurfaceCard>
+                    </div>
                 </form>
             </PageLayout>
-        </MainLayout>
+        </>
     );
 };
 

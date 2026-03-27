@@ -130,8 +130,15 @@ const userSlice = createSlice({
             })
             .addCase(fetchUsers.fulfilled, (state, action) => {
                 state.loading = false;
-                state.users = action.payload.data.users;
-                state.pagination = action.payload.pagination;
+                const data = action.payload?.data || {};
+                const meta = data.meta || action.payload?.pagination || {};
+                state.users = data.users || data.items || [];
+                state.pagination = {
+                    page: meta.page || 1,
+                    limit: meta.limit || 10,
+                    total: meta.totalItems || meta.total || 0,
+                    pages: meta.totalPages || meta.pages || 0
+                };
             })
             .addCase(fetchUsers.rejected, (state, action) => {
                 state.loading = false;

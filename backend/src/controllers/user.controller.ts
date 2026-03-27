@@ -1,7 +1,24 @@
-﻿import { Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
+import mongoose from 'mongoose';
 import User from '../models/user.model';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth.middleware';
+import { writeAuditLog } from '../services/audit.service';
+
+const USER_UPDATE_ALLOWLIST = new Set([
+    'firstName',
+    'lastName',
+    'email',
+    'phone',
+    'avatar',
+    'role',
+    'status',
+    'teamId',
+    'managerId',
+    'emailNotifications',
+    'smsNotifications',
+    'timezone'
+]);
 
 // @desc    Get all users
 // @route   GET /api/users
@@ -14,8 +31,7 @@ export const getUsers = async (
     try {
         const { page = 1, limit = 10, search, role, status } = req.query;
 
-        // Build filter
-        const filter: Record<string, unknown> = {};
+        const filter: Record<string, unknown> = { tenantId: req.tenantId! };
         if (role) filter.role = role;
         if (status) filter.status = status;
         if (search) {
@@ -26,7 +42,6 @@ export const getUsers = async (
             ];
         }
 
-        // Pagination
         const skip = (Number(page) - 1) * Number(limit);
 
         const users = await User.find(filter)
@@ -64,7 +79,11 @@ export const getUser = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        const user = await User.findById(req.params.id)
+        if (!mongoose.isValidObjectId(req.params.id)) {
+            throw new AppError('Invalid user identifier', 400);
+        }
+
+        const user = await User.findOne({ _id: req.params.id, tenantId: req.tenantId! })
             .select('-password')
             .populate('teamId', 'name')
             .populate('managerId', 'firstName lastName');
@@ -91,15 +110,28 @@ export const updateUser = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        const { password, ...updateData } = req.body;
+        if (!mongoose.isValidObjectId(req.params.id)) {
+            throw new AppError('Invalid user identifier', 400);
+        }
 
-        // Prevent password update through this route
+        const { password, ...inputData } = req.body;
         if (password) {
             throw new AppError('Password cannot be updated through this route', 400);
         }
 
-        const user = await User.findByIdAndUpdate(
-            req.params.id,
+        const updateData: Record<string, unknown> = {};
+        Object.keys(inputData || {}).forEach((key) => {
+            if (USER_UPDATE_ALLOWLIST.has(key)) {
+                updateData[key] = inputData[key];
+            }
+        });
+
+        if (Object.keys(updateData).length === 0) {
+            throw new AppError('No allowed fields provided for update', 400);
+        }
+
+        const user = await User.findOneAndUpdate(
+            { _id: req.params.id, tenantId: req.tenantId! },
             { $set: updateData },
             { new: true, runValidators: true }
         ).select('-password');
@@ -112,6 +144,17 @@ export const updateUser = async (
             success: true,
             message: 'User updated successfully',
             data: { user }
+        });
+
+        void writeAuditLog({
+            tenantId: req.tenantId!,
+            actorId: req.user?._id.toString(),
+            action: 'USER_UPDATED',
+            entityType: 'User',
+            entityId: req.params.id,
+            ip: req.ip,
+            requestId: (req as AuthRequest & { id?: string }).id,
+            changes: { updatedFields: Object.keys(updateData) }
         });
     } catch (error) {
         next(error);
@@ -127,13 +170,15 @@ export const deleteUser = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        const user = await User.findById(req.params.id);
+        if (!mongoose.isValidObjectId(req.params.id)) {
+            throw new AppError('Invalid user identifier', 400);
+        }
 
+        const user = await User.findOne({ _id: req.params.id, tenantId: req.tenantId! });
         if (!user) {
             throw new AppError('User not found', 404);
         }
 
-        // Prevent deleting self
         if (user._id.toString() === req.user!._id.toString()) {
             throw new AppError('You cannot delete your own account', 400);
         }
@@ -143,6 +188,16 @@ export const deleteUser = async (
         res.status(200).json({
             success: true,
             message: 'User deleted successfully'
+        });
+
+        void writeAuditLog({
+            tenantId: req.tenantId!,
+            actorId: req.user?._id.toString(),
+            action: 'USER_DELETED',
+            entityType: 'User',
+            entityId: req.params.id,
+            ip: req.ip,
+            requestId: (req as AuthRequest & { id?: string }).id
         });
     } catch (error) {
         next(error);

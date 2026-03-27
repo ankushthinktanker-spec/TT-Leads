@@ -3,7 +3,7 @@ import api from '../../api/axios';
 import { getErrorMessage } from '../../utils/error';
 
 interface ReportsState {
-    rows: unknown[];
+    rows: any[];
     loading: boolean;
     error: string | null;
     reportKey: string | null;

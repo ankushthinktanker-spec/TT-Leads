@@ -1,62 +1,51 @@
-import { useAppDispatch } from '../../hooks/redux';
-import { logout } from '../../store/slices/authSlice';
 import { useNavigate } from 'react-router-dom';
+import { Search, Bell, Plus, Sparkles } from 'lucide-react';
+import { useAppSelector } from '../../hooks/redux';
 
 const Navbar = () => {
-    const dispatch = useAppDispatch();
     const navigate = useNavigate();
-
-    const handleLogout = async () => {
-        await dispatch(logout());
-        navigate('/login');
-    };
+    const { user } = useAppSelector((state) => state.auth);
 
     return (
-        <div className="bg-secondary-950/60 backdrop-blur-xl h-20 flex items-center justify-between px-8 border-b border-white/5 z-10 font-sans">
-            <div className="flex items-center md:hidden">
-                    <button type="button" className="p-2.5 rounded-xl bg-white/5 text-secondary-400 hover:text-primary-400 transition-all">
-                    <svg className="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
-                    </svg>
-                </button>
+        <header className="flex h-[68px] flex-shrink-0 items-center justify-between gap-4 border-b border-slate-200/90 bg-white/92 px-5 backdrop-blur-xl md:px-6">
+            <div className="relative max-w-[500px] flex-1">
+                <Search
+                    size={16}
+                    className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                />
+                <input
+                    type="text"
+                    placeholder="Search leads, companies, proposals..."
+                    className="h-11 w-full rounded-2xl border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#fbfcff_100%)] pl-11 pr-20 text-sm font-medium text-slate-700 shadow-[0_8px_18px_rgba(15,23,42,0.03)] placeholder:text-slate-400 outline-none transition-all focus:border-[#335CFF] focus:bg-white focus:ring-4 focus:ring-[#335CFF]/10"
+                />
+                <kbd className="absolute right-4 top-1/2 hidden -translate-y-1/2 items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-semibold text-slate-400 sm:inline-flex">
+                    Ctrl K
+                </kbd>
             </div>
 
-            <div className="flex-1 flex justify-between items-center max-w-[1600px] mx-auto w-full">
-                <div className="flex-1 flex items-center max-w-md">
-                    <div className="relative w-full group">
-                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                            <svg className="h-4 w-4 text-secondary-500 group-focus-within:text-primary-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                            </svg>
-                        </div>
-                        <input
-                            type="text"
-                            placeholder="Universal Search Intelligence..."
-                            className="w-full bg-white/5 border border-white/5 rounded-2xl py-2.5 pl-11 pr-4 text-xs font-semibold text-secondary-100 placeholder-secondary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 transition-all font-sans"
-                        />
+            <div className="flex items-center gap-3">
+                <button onClick={() => navigate('/leads/new')} className="hidden h-11 items-center gap-2 rounded-2xl bg-[#335CFF] px-4 text-sm font-semibold text-white shadow-[0_12px_24px_rgba(51,92,255,0.24)] transition hover:bg-[#2649D8] sm:inline-flex">
+                    <Sparkles size={13} />
+                    <Plus size={13} />
+                    Add Lead
+                </button>
+
+                <button className="relative flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 shadow-[0_8px_18px_rgba(15,23,42,0.03)] transition hover:border-slate-300 hover:text-slate-700">
+                    <Bell size={17} />
+                    <span className="absolute right-3 top-3 h-2 w-2 rounded-full bg-[#335CFF] ring-2 ring-white" />
+                </button>
+
+                <div className="hidden items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 shadow-[0_8px_18px_rgba(15,23,42,0.04)] md:flex">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-[#E9EEFF] text-[#335CFF] text-[10px] font-bold">
+                        {user?.firstName?.[0]}{user?.lastName?.[0]}
+                    </div>
+                    <div className="leading-none">
+                        <p className="text-xs font-semibold text-slate-900">{user?.firstName} {user?.lastName}</p>
+                        <p className="mt-1 text-[10px] uppercase tracking-[0.18em] text-slate-400">{user?.role}</p>
                     </div>
                 </div>
-
-                <div className="ml-8 flex items-center gap-4">
-                    <button className="p-2.5 rounded-xl bg-white/5 text-secondary-400 hover:text-primary-400 transition-all relative">
-                        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                        </svg>
-                        <span className="absolute top-2 right-2 w-2 h-2 bg-primary-500 rounded-full border-2 border-secondary-900 shadow-lg shadow-primary-500/50"></span>
-                    </button>
-
-                    <button
-                        onClick={handleLogout}
-                        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-red-500/10 border border-red-500/10 text-red-400 hover:bg-red-500/20 transition-all text-xs font-black uppercase tracking-widest"
-                    >
-                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                        </svg>
-                        <span>Eject</span>
-                    </button>
-                </div>
             </div>
-        </div>
+        </header>
     );
 };
 

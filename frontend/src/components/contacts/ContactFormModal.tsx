@@ -4,7 +4,7 @@ import { createContact, updateContact } from '../../store/slices/contactSlice';
 import { fetchCompanies } from '../../store/slices/companySlice';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
-import { FormLabel, TextInput, SelectInput, TextareaInput } from '../ui/Form';
+import { TextInput, SelectInput, TextareaInput } from '../ui/Form';
 import { showToast } from '../../utils/toast';
 import { getErrorMessage } from '../../utils/error';
 
@@ -62,7 +62,7 @@ const ContactFormModal = ({ contact, onClose }: ContactFormModalProps) => {
                 phone: contact.phone || '',
                 alternatePhone: contact.alternatePhone || '',
                 whatsapp: contact.whatsapp || '',
-                companyId: contact.companyId?._id || contact.companyId || '',
+                companyId: (contact.companyId as any)?._id || (contact.companyId as string) || '',
                 isPrimary: contact.isPrimary || false,
                 status: contact.status || 'Active',
                 notes: contact.notes || ''
@@ -97,132 +97,151 @@ const ContactFormModal = ({ contact, onClose }: ContactFormModalProps) => {
 
     return (
         <Modal
-            title={contact ? 'Edit Contact' : 'Add New Contact'}
+            title={contact ? 'Edit Contact' : 'Add Contact'}
             onClose={onClose}
             footer={(
-                <>
+                <div className="flex items-center gap-3">
                     <Button type="button" onClick={onClose} variant="outline">
                         Cancel
                     </Button>
                     <Button type="submit" form="contact-form" disabled={loading} variant="primary">
                         {loading ? 'Saving...' : contact ? 'Update Contact' : 'Create Contact'}
                     </Button>
-                </>
+                </div>
             )}
         >
-            <form onSubmit={handleSubmit} className="space-y-4" id="contact-form">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <FormLabel>
-                            First Name <span className="text-red-500">*</span>
-                        </FormLabel>
+            <form onSubmit={handleSubmit} className="space-y-5 py-1" id="contact-form">
+                <div className="workspace-notice workspace-notice--muted">
+                    <p className="text-sm font-semibold text-slate-900">
+                        {contact ? 'Update contact information and communication details.' : 'Create a contact record with role, company, and communication details.'}
+                    </p>
+                </div>
+                <div className="grid grid-cols-1 gap-4">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
+                        <div className="mb-4 flex items-center gap-3">
+                            <span className="h-px flex-1 bg-slate-200" />
+                            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.3em]">Basic information</span>
+                            <span className="h-px flex-1 bg-slate-200" />
+                        </div>
+                        <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
+                    <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-1">First Name</label>
                         <TextInput
                             type="text"
                             name="firstName"
                             value={formData.firstName}
                             onChange={handleChange}
                             required
+                            placeholder="e.g. Alexander"
                         />
                     </div>
 
-                    <div>
-                        <FormLabel>
-                            Last Name <span className="text-red-500">*</span>
-                        </FormLabel>
+                    <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-1">Last Name</label>
                         <TextInput
                             type="text"
                             name="lastName"
                             value={formData.lastName}
                             onChange={handleChange}
                             required
+                            placeholder="e.g. Pierce"
                         />
                     </div>
 
-                    <div>
-                        <FormLabel>
-                            Company <span className="text-red-500">*</span>
-                        </FormLabel>
+                    <div className="md:col-span-2 space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-1">Company</label>
                         <SelectInput
                             name="companyId"
                             value={formData.companyId}
                             onChange={handleChange}
                             required
                         >
-                            <option value="">Select Company</option>
+                            <option value="">Select company</option>
                             {companies.map((company) => (
                                 <option key={company._id} value={company._id}>{company.name}</option>
                             ))}
                         </SelectInput>
                     </div>
+                        </div>
+                    </div>
 
-                    <div>
-                        <FormLabel>Designation</FormLabel>
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                        <div className="mb-4 flex items-center gap-3">
+                            <span className="h-px flex-1 bg-slate-200" />
+                            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.3em]">Role information</span>
+                            <span className="h-px flex-1 bg-slate-200" />
+                        </div>
+                        <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
+
+                    <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-1">Designation</label>
                         <TextInput
                             type="text"
                             name="designation"
                             value={formData.designation}
                             onChange={handleChange}
+                            placeholder="e.g. Sales Director"
                         />
                     </div>
 
-                    <div>
-                        <FormLabel>Department</FormLabel>
+                    <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-1">Department</label>
                         <TextInput
                             type="text"
                             name="department"
                             value={formData.department}
                             onChange={handleChange}
+                            placeholder="e.g. Operations"
                         />
                     </div>
+                        </div>
+                    </div>
 
-                    <div>
-                        <FormLabel>
-                            Email <span className="text-red-500">*</span>
-                        </FormLabel>
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                        <div className="mb-4 flex items-center gap-3">
+                            <span className="h-px flex-1 bg-slate-200" />
+                            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.3em]">Communication details</span>
+                            <span className="h-px flex-1 bg-slate-200" />
+                        </div>
+                        <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
+
+                    <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-1">Primary Email</label>
                         <TextInput
                             type="email"
                             name="email"
                             value={formData.email}
                             onChange={handleChange}
                             required
+                            placeholder="protocol@entity.com"
                         />
                     </div>
 
-                    <div>
-                        <FormLabel>
-                            Phone <span className="text-red-500">*</span>
-                        </FormLabel>
+                    <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-1">Primary Phone</label>
                         <TextInput
                             type="tel"
                             name="phone"
                             value={formData.phone}
                             onChange={handleChange}
                             required
+                            placeholder="+1 (555) 000-0000"
                         />
                     </div>
 
-                    <div>
-                        <FormLabel>Alternate Phone</FormLabel>
-                        <TextInput
-                            type="tel"
-                            name="alternatePhone"
-                            value={formData.alternatePhone}
-                            onChange={handleChange}
-                        />
-                    </div>
-
-                    <div>
-                        <FormLabel>WhatsApp</FormLabel>
+                    <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-1">WhatsApp</label>
                         <TextInput
                             type="tel"
                             name="whatsapp"
                             value={formData.whatsapp}
                             onChange={handleChange}
+                            placeholder="WhatsApp number"
                         />
                     </div>
 
-                    <div>
-                        <FormLabel>Status</FormLabel>
+                    <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-1">Status</label>
                         <SelectInput
                             name="status"
                             value={formData.status}
@@ -232,28 +251,32 @@ const ContactFormModal = ({ contact, onClose }: ContactFormModalProps) => {
                             <option value="Inactive">Inactive</option>
                         </SelectInput>
                     </div>
-
-                    <div className="md:col-span-2">
-                        <label className="flex items-center gap-2 text-secondary-300">
-                            <input
-                                type="checkbox"
-                                name="isPrimary"
-                                checked={formData.isPrimary}
-                                onChange={handleChange}
-                                className="checkbox"
-                            />
-                            <span className="text-sm font-medium">Primary Contact</span>
-                        </label>
+                        </div>
                     </div>
 
-                    <div className="md:col-span-2">
-                        <FormLabel>Notes</FormLabel>
+                    <div className="md:col-span-2 flex items-center justify-between rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4">
+                        <div>
+                            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-indigo-900">Primary contact</p>
+                            <p className="text-[11px] font-medium tracking-wide text-indigo-600">Use this when the person is the main point of contact for the company.</p>
+                        </div>
+                        <input
+                            type="checkbox"
+                            name="isPrimary"
+                            checked={formData.isPrimary}
+                            onChange={handleChange}
+                            className="h-6 w-6 rounded-lg border-indigo-200 text-indigo-600 focus:ring-indigo-500/20 cursor-pointer"
+                        />
+                    </div>
+
+                    <div className="md:col-span-2 space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-1">Notes</label>
                         <TextareaInput
                             name="notes"
                             value={formData.notes}
                             onChange={handleChange}
                             rows={3}
-                            placeholder="Add context or relationship details..."
+                            placeholder="Add relationship context, communication preferences, or notes..."
+                            className="min-h-[96px] resize-none"
                         />
                     </div>
                 </div>
@@ -263,3 +286,4 @@ const ContactFormModal = ({ contact, onClose }: ContactFormModalProps) => {
 };
 
 export default ContactFormModal;
+

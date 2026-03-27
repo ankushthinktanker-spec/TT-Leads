@@ -1,4 +1,4 @@
-﻿import { Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
 import ProposalTemplate from '../models/proposal-template.model';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth.middleware';
@@ -14,7 +14,7 @@ export const getProposalTemplates = async (
     try {
         const { category, isActive } = req.query;
 
-        const filter: Record<string, unknown> = {};
+        const filter: Record<string, unknown> = { tenantId: req.tenantId! };
         if (category) filter.category = category;
         if (isActive !== undefined) filter.isActive = isActive === 'true';
 
@@ -40,11 +40,11 @@ export const getProposalTemplate = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        const template = await ProposalTemplate.findById(req.params.id)
+        const template = await ProposalTemplate.findOne({ _id: req.params.id, tenantId: req.tenantId! })
             .populate('createdBy', 'firstName lastName email');
 
         if (!template) {
-            throw new AppError('Template not found', 404);
+            throw new AppError('Template not found or unauthorized access', 404);
         }
 
         res.status(200).json({
@@ -67,6 +67,7 @@ export const createProposalTemplate = async (
     try {
         const template = await ProposalTemplate.create({
             ...req.body,
+            tenantId: req.tenantId!,
             createdBy: req.user!._id
         });
 
@@ -89,13 +90,13 @@ export const updateProposalTemplate = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        const template = await ProposalTemplate.findById(req.params.id);
+        const template = await ProposalTemplate.findOne({ _id: req.params.id, tenantId: req.tenantId! });
         if (!template) {
-            throw new AppError('Template not found', 404);
+            throw new AppError('Template not found or unauthorized access', 404);
         }
 
-        const updatedTemplate = await ProposalTemplate.findByIdAndUpdate(
-            req.params.id,
+        const updatedTemplate = await ProposalTemplate.findOneAndUpdate(
+            { _id: req.params.id, tenantId: req.tenantId! },
             { $set: req.body },
             { new: true, runValidators: true }
         );
@@ -119,9 +120,9 @@ export const deleteProposalTemplate = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        const template = await ProposalTemplate.findById(req.params.id);
+        const template = await ProposalTemplate.findOne({ _id: req.params.id, tenantId: req.tenantId! });
         if (!template) {
-            throw new AppError('Template not found', 404);
+            throw new AppError('Template not found or unauthorized access', 404);
         }
 
         await template.deleteOne();

@@ -1,8 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
-import User from '../models/user.model';
+import User, { IUser } from '../models/user.model';
+import RevokedToken from '../models/revoked-token.model';
 import { AppError } from '../middleware/errorHandler';
 import { generateToken, generateRefreshToken, verifyRefreshToken } from '../utils/jwt.utils';
+import { env } from '../config/env';
+import { logSecurityEvent } from '../services/security-event.service';
 import {
     registerSchema,
     loginSchema,
@@ -14,6 +17,23 @@ import { AuthRequest } from '../middleware/auth.middleware';
 const hashToken = (token: string): string =>
     crypto.createHash('sha256').update(token).digest('hex');
 
+const hashFingerprint = (value: string): string =>
+    crypto.createHash('sha256').update(value).digest('hex');
+
+const getClientFingerprint = (req: Request): string => {
+    const userAgent = req.headers['user-agent'] || 'unknown-agent';
+    return hashFingerprint(`${req.ip}|${userAgent}`);
+};
+
+const applyLoginFailure = async (user: IUser): Promise<void> => {
+    user.loginAttempts = (user.loginAttempts || 0) + 1;
+    if (user.loginAttempts >= env.MAX_LOGIN_ATTEMPTS) {
+        user.lockUntil = new Date(Date.now() + env.LOGIN_LOCK_MINUTES * 60 * 1000);
+        user.loginAttempts = 0;
+    }
+    await user.save();
+};
+
 // @desc    Register a new user
 // @route   POST /api/auth/register
 // @access  Private (Admin only)
@@ -24,7 +44,7 @@ export const register = async (
 ): Promise<void> => {
     try {
         // Validate request body
-        const { error, value } = registerSchema.validate(req.body);
+        const { error, value } = registerSchema.validate(req.body, { abortEarly: true, stripUnknown: true });
         if (error) {
             throw new AppError(error.details[0].message, 400);
         }
@@ -52,8 +72,10 @@ export const register = async (
         // Generate tokens
         const token = generateToken(user._id.toString());
         const refreshToken = generateRefreshToken(user._id.toString());
-        const refreshDecoded = verifyRefreshToken(refreshToken) as { exp?: number };
+        const refreshDecoded = verifyRefreshToken(refreshToken) as { exp?: number; jti?: string };
         user.refreshTokenHash = hashToken(refreshToken);
+        user.refreshTokenJti = refreshDecoded?.jti;
+        user.refreshTokenClientHash = getClientFingerprint(req);
         if (refreshDecoded?.exp) {
             user.refreshTokenExpiresAt = new Date(refreshDecoded.exp * 1000);
         }
@@ -72,7 +94,8 @@ export const register = async (
                     status: user.status
                 },
                 token,
-                refreshToken
+                refreshToken,
+                mfaRequired: false
             }
         });
     } catch (error) {
@@ -90,7 +113,7 @@ export const login = async (
 ): Promise<void> => {
     try {
         // Validate request body
-        const { error, value } = loginSchema.validate(req.body);
+        const { error, value } = loginSchema.validate(req.body, { abortEarly: true, stripUnknown: true });
         if (error) {
             throw new AppError(error.details[0].message, 400);
         }
@@ -98,14 +121,41 @@ export const login = async (
         const { email, password } = value;
 
         // Check if user exists (include password for comparison)
-        const user = await User.findOne({ email }).select('+password');
+        const user = await User.findOne({ email }).select('+password +loginAttempts +lockUntil');
         if (!user) {
+            await logSecurityEvent({
+                eventType: 'auth.login.failed',
+                severity: 'medium',
+                ip: req.ip,
+                userAgent: req.headers['user-agent'],
+                metadata: { reason: 'user_not_found', email }
+            });
             throw new AppError('Invalid credentials', 401);
+        }
+
+        if (user.lockUntil && user.lockUntil.getTime() > Date.now()) {
+            await logSecurityEvent({
+                eventType: 'auth.login.locked',
+                severity: 'high',
+                userId: user._id.toString(),
+                ip: req.ip,
+                userAgent: req.headers['user-agent']
+            });
+            throw new AppError('Account temporarily locked due to repeated failed attempts', 423);
         }
 
         // Check if password matches
         const isPasswordMatch = await user.comparePassword(password);
         if (!isPasswordMatch) {
+            await applyLoginFailure(user);
+            await logSecurityEvent({
+                eventType: 'auth.login.failed',
+                severity: 'medium',
+                userId: user._id.toString(),
+                ip: req.ip,
+                userAgent: req.headers['user-agent'],
+                metadata: { reason: 'invalid_password' }
+            });
             throw new AppError('Invalid credentials', 401);
         }
 
@@ -114,15 +164,37 @@ export const login = async (
             throw new AppError('Your account is not active. Please contact administrator', 403);
         }
 
+        if (user.mfaEnabled) {
+            await logSecurityEvent({
+                eventType: 'auth.login.mfa_required',
+                severity: 'low',
+                userId: user._id.toString(),
+                ip: req.ip,
+                userAgent: req.headers['user-agent']
+            });
+            res.status(202).json({
+                success: true,
+                data: {
+                    mfaRequired: true,
+                    message: 'MFA challenge required'
+                }
+            });
+            return;
+        }
+
         // Update last login
         user.lastLogin = new Date();
+        user.loginAttempts = 0;
+        user.lockUntil = undefined;
         await user.save();
 
         // Generate tokens
         const token = generateToken(user._id.toString());
         const refreshToken = generateRefreshToken(user._id.toString());
-        const refreshDecoded = verifyRefreshToken(refreshToken) as { exp?: number };
+        const refreshDecoded = verifyRefreshToken(refreshToken) as { exp?: number; jti?: string };
         user.refreshTokenHash = hashToken(refreshToken);
+        user.refreshTokenJti = refreshDecoded?.jti;
+        user.refreshTokenClientHash = getClientFingerprint(req);
         if (refreshDecoded?.exp) {
             user.refreshTokenExpiresAt = new Date(refreshDecoded.exp * 1000);
         }
@@ -142,7 +214,8 @@ export const login = async (
                     avatar: user.avatar
                 },
                 token,
-                refreshToken
+                refreshToken,
+                mfaRequired: false
             }
         });
     } catch (error) {
@@ -188,7 +261,7 @@ export const updateProfile = async (
             throw new AppError('Not authorized', 401);
         }
         // Validate request body
-        const { error, value } = updateProfileSchema.validate(req.body);
+        const { error, value } = updateProfileSchema.validate(req.body, { abortEarly: true, stripUnknown: true });
         if (error) {
             throw new AppError(error.details[0].message, 400);
         }
@@ -222,7 +295,7 @@ export const changePassword = async (
             throw new AppError('Not authorized', 401);
         }
         // Validate request body
-        const { error, value } = changePasswordSchema.validate(req.body);
+        const { error, value } = changePasswordSchema.validate(req.body, { abortEarly: true, stripUnknown: true });
         if (error) {
             throw new AppError(error.details[0].message, 400);
         }
@@ -245,6 +318,8 @@ export const changePassword = async (
         user.password = newPassword;
         user.refreshTokenHash = undefined;
         user.refreshTokenExpiresAt = undefined;
+        user.refreshTokenJti = undefined;
+        user.refreshTokenClientHash = undefined;
         await user.save();
 
         res.status(200).json({
@@ -287,6 +362,28 @@ export const refreshToken = async (
             throw new AppError('Refresh token is invalid', 401);
         }
 
+        const expectedJti = 'jti' in decoded ? decoded.jti : undefined;
+        if (expectedJti && user.refreshTokenJti && expectedJti !== user.refreshTokenJti) {
+            throw new AppError('Refresh token is invalid', 401);
+        }
+
+        const revoked = expectedJti ? await RevokedToken.exists({ jti: expectedJti }) : null;
+        if (revoked) {
+            throw new AppError('Refresh token has been revoked', 401);
+        }
+
+        const clientHash = getClientFingerprint(req);
+        if (user.refreshTokenClientHash && user.refreshTokenClientHash !== clientHash) {
+            await logSecurityEvent({
+                eventType: 'auth.refresh.binding_mismatch',
+                severity: 'high',
+                userId: user._id.toString(),
+                ip: req.ip,
+                userAgent: req.headers['user-agent']
+            });
+            throw new AppError('Refresh token is invalid for this client', 401);
+        }
+
         if (user.refreshTokenExpiresAt && user.refreshTokenExpiresAt.getTime() < Date.now()) {
             throw new AppError('Refresh token expired', 401);
         }
@@ -298,8 +395,18 @@ export const refreshToken = async (
         // Generate new tokens
         const newToken = generateToken(user._id.toString());
         const newRefreshToken = generateRefreshToken(user._id.toString());
-        const refreshDecoded = verifyRefreshToken(newRefreshToken) as { exp?: number };
+        const refreshDecoded = verifyRefreshToken(newRefreshToken) as { exp?: number; jti?: string };
+        if (expectedJti && decoded.exp) {
+            await RevokedToken.create({
+                jti: expectedJti,
+                userId: user._id,
+                expiresAt: new Date(decoded.exp * 1000),
+                reason: 'rotated'
+            });
+        }
         user.refreshTokenHash = hashToken(newRefreshToken);
+        user.refreshTokenJti = refreshDecoded?.jti;
+        user.refreshTokenClientHash = clientHash;
         if (refreshDecoded?.exp) {
             user.refreshTokenExpiresAt = new Date(refreshDecoded.exp * 1000);
         }
@@ -327,8 +434,23 @@ export const logout = async (
 ): Promise<void> => {
     try {
         if (req.user?._id) {
+            const user = await User.findById(req.user._id).select('refreshTokenJti refreshTokenExpiresAt');
+            if (user?.refreshTokenJti && user.refreshTokenExpiresAt) {
+                await RevokedToken.create({
+                    jti: user.refreshTokenJti,
+                    userId: req.user._id,
+                    expiresAt: user.refreshTokenExpiresAt,
+                    reason: 'logout'
+                });
+            }
+
             await User.findByIdAndUpdate(req.user._id, {
-                $unset: { refreshTokenHash: '', refreshTokenExpiresAt: '' }
+                $unset: {
+                    refreshTokenHash: '',
+                    refreshTokenExpiresAt: '',
+                    refreshTokenJti: '',
+                    refreshTokenClientHash: ''
+                }
             });
         }
         res.status(200).json({

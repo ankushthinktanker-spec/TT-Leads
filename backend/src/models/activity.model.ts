@@ -1,6 +1,7 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
 export interface IActivity extends Document {
+    tenantId: mongoose.Types.ObjectId;
     // Activity Type
     activityType: 'Call' | 'Meeting' | 'Email' | 'WhatsApp' | 'Note';
 
@@ -39,6 +40,11 @@ export interface IActivity extends Document {
 
 const activitySchema = new Schema<IActivity>(
     {
+        tenantId: {
+            type: Schema.Types.ObjectId,
+            ref: 'Tenant',
+            required: [true, 'Tenant ID is strongly required to identify activity containment']
+        },
         activityType: {
             type: String,
             required: true,
@@ -115,12 +121,12 @@ const activitySchema = new Schema<IActivity>(
     }
 );
 
-// Indexes
-activitySchema.index({ 'relatedTo.model': 1, 'relatedTo.id': 1 });
-activitySchema.index({ activityDate: -1 });
-activitySchema.index({ nextFollowUpDate: 1 });
-activitySchema.index({ createdBy: 1, activityDate: -1 });
-activitySchema.index({ activityType: 1 });
+// Indexes for Multi-Tenancy mapping
+activitySchema.index({ tenantId: 1, 'relatedTo.model': 1, 'relatedTo.id': 1 });
+activitySchema.index({ tenantId: 1, activityDate: -1 });
+activitySchema.index({ tenantId: 1, nextFollowUpDate: 1 });
+activitySchema.index({ tenantId: 1, createdBy: 1, activityDate: -1 });
+activitySchema.index({ tenantId: 1, activityType: 1 });
 
 const Activity = mongoose.model<IActivity>('Activity', activitySchema);
 

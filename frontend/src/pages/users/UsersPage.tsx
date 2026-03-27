@@ -1,25 +1,24 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAppDispatch, useAppSelector } from '../../hooks/redux';
 import { fetchUsers, deleteUser, User } from '../../store/slices/userSlice';
-import MainLayout from '../../components/layout/MainLayout';
 import UserFormModal from './UserFormModal';
-import { Plus, Search, Edit, Trash2 } from 'lucide-react';
-import PageLayout from '../../components/ui/PageLayout';
-import PageHeader from '../../components/ui/PageHeader';
-import FilterBar from '../../components/ui/FilterBar';
-import SurfaceCard from '../../components/ui/SurfaceCard';
-import EmptyState from '../../components/ui/EmptyState';
-import { Table, TableHead, TableRow, TableHeadCell, TableBody, TableCell } from '../../components/ui/Table';
+import { Edit, Trash2, Shield, Users } from 'lucide-react';
+import InlineError from '../../components/ui/InlineError';
+import Badge from '../../components/ui/Badge';
 import api from '../../api/axios';
+import { useGlobalSearch } from '../../context/GlobalSearchContext';
+import ListPageShell from '../../components/crm/ListPageShell';
+import DataTable, { ColumnDef } from '../../components/crm/DataTable';
 
-const UsersPage = () => {
+export const UsersPage = () => {
     const dispatch = useAppDispatch();
-    const { users, loading, pagination } = useAppSelector((state) => state.users);
+    const { users, loading, error, pagination } = useAppSelector((state) => state.users);
     const { user: currentUser } = useAppSelector((state) => state.auth);
+    const safePagination = pagination ?? { page: 1, limit: 10, total: 0, pages: 0 };
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedUser, setSelectedUser] = useState<User | null>(null);
-    const [searchQuery, setSearchQuery] = useState('');
+    const { value: searchQuery, setValue: setSearchQuery } = useGlobalSearch();
     const [roleFilter, setRoleFilter] = useState('');
     const [roles, setRoles] = useState<Array<{ _id: string; name: string }>>([]);
 
@@ -32,7 +31,7 @@ const UsersPage = () => {
             try {
                 const response = await api.get('/roles');
                 setRoles(response.data.data.roles || []);
-            } catch (error) {
+            } catch {
                 setRoles([
                     { _id: 'admin', name: 'Admin' },
                     { _id: 'manager', name: 'Manager' },
@@ -44,10 +43,9 @@ const UsersPage = () => {
         loadRoles();
     }, []);
 
-    const handleSearch = (e: React.FormEvent) => {
-        e.preventDefault();
+    const runFetch = (nextPage = 1) => {
         dispatch(fetchUsers({
-            page: 1,
+            page: nextPage,
             limit: 10,
             search: searchQuery,
             role: roleFilter
@@ -71,22 +69,8 @@ const UsersPage = () => {
     };
 
     const handleSuccess = () => {
-        dispatch(fetchUsers({
-            page: pagination.page,
-            limit: pagination.limit,
-            search: searchQuery,
-            role: roleFilter
-        }));
+        runFetch(safePagination.page);
     };
-
-    const activeFilters = useMemo(() => {
-        const filters: string[] = [];
-        if (searchQuery.trim()) filters.push(`Search: ${searchQuery.trim()}`);
-        if (roleFilter) filters.push(`Role: ${roleFilter}`);
-        return filters;
-    }, [searchQuery, roleFilter]);
-
-    const hasActiveFilters = activeFilters.length > 0;
 
     const handleClearFilters = () => {
         setSearchQuery('');
@@ -94,189 +78,199 @@ const UsersPage = () => {
         dispatch(fetchUsers({ page: 1, limit: 10 }));
     };
 
-    const getRoleBadgeColor = (role: string) => {
+    const getRoleBadgeVariant = (role: string): 'neutral' | 'success' | 'warning' | 'danger' => {
         switch (role) {
-            case 'Admin': return 'bg-brand-500/20 text-brand-200';
-            case 'Manager': return 'bg-blue-500/15 text-blue-300';
-            case 'BDM': return 'status-success';
-            case 'Marketing': return 'status-warning';
-            default: return 'status-neutral';
+            case 'Admin': return 'danger';
+            case 'Manager': return 'warning';
+            case 'BDM': return 'success';
+            default: return 'neutral';
         }
     };
 
-    return (
-        <MainLayout>
-            <PageLayout>
-                <PageHeader
-                    title="User Management"
-                    subtitle="Manage system users, roles, and permissions"
-                    actions={(
-                        <button
-                            onClick={() => setIsModalOpen(true)}
-                            className="btn btn-primary"
-                        >
-                            <Plus size={20} />
-                            Add User
-                        </button>
-                    )}
-                />
-
-                <FilterBar className="mt-6">
-                    <form onSubmit={handleSearch} className="flex flex-col lg:flex-row gap-4">
-                        <div className="flex-1 relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-secondary-500" size={20} />
-                            <input
-                                type="text"
-                                placeholder="Search users..."
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className="input pl-10"
-                            />
+    const columns: ColumnDef<User>[] = [
+        {
+            id: 'user',
+            header: 'User',
+            className: 'w-[34%]',
+            cell: (user) => (
+                <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-sm font-black text-slate-900 shadow-[0_4px_12px_rgba(15,23,42,0.03)]">
+                        {user.firstName ? user.firstName[0] : 'U'}{user.lastName ? user.lastName[0] : ''}
+                    </div>
+                    <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold text-slate-950">
+                            {user.firstName || 'Unknown'} {user.lastName || ''}
                         </div>
-                        <select
-                            value={roleFilter}
-                            onChange={(e) => setRoleFilter(e.target.value)}
-                            className="input lg:w-48"
-                        >
-                            <option value="">All Roles</option>
-                            {roles.map((role) => (
-                                <option key={role._id} value={role.name}>
-                                    {role.name}
-                                </option>
-                            ))}
-                        </select>
-                        <button type="submit" className="btn btn-outline">
-                            Filter
-                        </button>
-                    </form>
-                </FilterBar>
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                    {activeFilters.map((filter) => (
-                        <span key={filter} className="filter-chip">
-                            {filter}
-                        </span>
-                    ))}
-                    {hasActiveFilters && (
+                        <div className="truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+                            {user.email}
+                        </div>
+                    </div>
+                </div>
+            )
+        },
+        {
+            id: 'role',
+            header: 'Role',
+            className: 'w-[14%]',
+            cell: (user) => (
+                <Badge
+                    variant={getRoleBadgeVariant(user.role)}
+                    className="px-3 py-1 text-[10px] font-bold uppercase tracking-[0.08em] shadow-none"
+                >
+                    {user.role}
+                </Badge>
+            )
+        },
+        {
+            id: 'status',
+            header: 'Status',
+            className: 'w-[12%]',
+            cell: (user) => (
+                <div className="flex items-center gap-2">
+                    <div className={`h-2 w-2 rounded-full ${user.status === 'Active' ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                    <span className="text-xs font-semibold uppercase tracking-tight text-slate-700">{user.status}</span>
+                </div>
+            )
+        },
+        {
+            id: 'contact',
+            header: 'Contact',
+            className: 'w-[18%]',
+            cell: (user) => <span className="text-sm font-medium text-slate-600">{user.phone || '-'}</span>
+        },
+        {
+            id: 'created',
+            header: 'Created',
+            className: 'w-[14%]',
+            cell: (user) => (
+                <span className="text-sm font-medium text-slate-600">
+                    {user.createdAt ? new Date(user.createdAt).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : '-'}
+                </span>
+            )
+        },
+        {
+            id: 'actions',
+            header: 'Actions',
+            align: 'right',
+            cell: (user) => (
+                <div className="flex items-center justify-end gap-2">
+                    <button
+                        onClick={() => handleEdit(user)}
+                        className="icon-button"
+                        title="Edit"
+                    >
+                        <Edit size={15} />
+                    </button>
+                    {currentUser?.id !== user._id && (
                         <button
-                            type="button"
-                            onClick={handleClearFilters}
-                            className="ml-auto text-xs text-primary-400 font-semibold uppercase tracking-widest hover:text-primary-300"
+                            onClick={() => handleDelete(user._id)}
+                            className="icon-button text-rose-500 hover:text-rose-600"
+                            title="Delete"
                         >
-                            Clear filters
+                            <Trash2 size={15} />
                         </button>
                     )}
                 </div>
+            )
+        }
+    ];
 
-                <SurfaceCard className="mt-6 overflow-hidden">
-                    <div className="overflow-x-auto">
-                        <Table>
-                            <TableHead>
-                                <TableRow>
-                                    <TableHeadCell>User</TableHeadCell>
-                                    <TableHeadCell>Role</TableHeadCell>
-                                    <TableHeadCell>Status</TableHeadCell>
-                                    <TableHeadCell>Contact</TableHeadCell>
-                                    <TableHeadCell>Joined</TableHeadCell>
-                                    <TableHeadCell className="text-right">Actions</TableHeadCell>
-                                </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {loading ? (
-                                    <TableRow>
-                                        <TableCell colSpan={6} className="text-center">
-                                            <div className="flex justify-center py-6">
-                                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-500"></div>
-                                            </div>
-                                        </TableCell>
-                                    </TableRow>
-                                ) : !users || users.length === 0 ? (
-                                    <TableRow>
-                                        <TableCell colSpan={6}>
-                                            <EmptyState title="No users found" description="Try adjusting your filters or add a new user." />
-                                        </TableCell>
-                                    </TableRow>
-                                ) : (
-                                    users.map((user) => (
-                                        <TableRow key={user._id} className="group">
-                                            <TableCell>
-                                                <div className="flex items-center">
-                                                    <div className="h-10 w-10 rounded-full bg-brand-500/10 flex items-center justify-center text-brand-300 font-semibold">
-                                                        {user.firstName ? user.firstName[0] : 'U'}{user.lastName ? user.lastName[0] : ''}
-                                                    </div>
-                                                    <div className="ml-4">
-                                                        <div className="text-sm font-medium text-secondary-100">
-                                                            {user.firstName || 'Unknown'} {user.lastName || ''}
-                                                        </div>
-                                                        <div className="text-xs text-secondary-500">{user.email}</div>
-                                                    </div>
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <span className={`status-pill ${getRoleBadgeColor(user.role)}`}>
-                                                    {user.role}
-                                                </span>
-                                            </TableCell>
-                                            <TableCell>
-                                                <span className={`status-pill ${user.status === 'Active' ? 'status-success' : 'status-danger'}`}>
-                                                    {user.status}
-                                                </span>
-                                            </TableCell>
-                                            <TableCell className="text-secondary-400">{user.phone || '-'}</TableCell>
-                                            <TableCell className="text-secondary-400">
-                                                {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '-'}
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                                <div className="flex justify-end gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                                                    <button
-                                                        onClick={() => handleEdit(user)}
-                                                        className="icon-button"
-                                                        title="Edit"
-                                                    >
-                                                        <Edit size={18} />
-                                                    </button>
-                                                    {currentUser?.id !== user._id && (
-                                                        <button
-                                                            onClick={() => handleDelete(user._id)}
-                                                            className="icon-button text-red-400 hover:text-red-300"
-                                                            title="Delete"
-                                                        >
-                                                            <Trash2 size={18} />
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))
-                                )}
-                            </TableBody>
-                        </Table>
-                    </div>
+    return (
+        <>
+            {error && (
+                <InlineError
+                    message={error}
+                    onRetry={() => runFetch(safePagination.page)}
+                />
+            )}
 
-                    {pagination && pagination.pages > 1 && (
-                        <div className="px-6 py-4 border-t border-white/5 flex items-center justify-between">
-                            <div className="text-sm text-secondary-400">
-                                Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} results
-                            </div>
-                            <div className="flex gap-2">
-                                <button
-                                    onClick={() => dispatch(fetchUsers({ page: pagination.page - 1, limit: 10 }))}
-                                    disabled={pagination.page === 1}
-                                    className="btn btn-outline py-1.5 px-3 text-xs"
-                                >
-                                    Previous
-                                </button>
-                                <button
-                                    onClick={() => dispatch(fetchUsers({ page: pagination.page + 1, limit: 10 }))}
-                                    disabled={pagination.page === pagination.pages}
-                                    className="btn btn-outline py-1.5 px-3 text-xs"
-                                >
-                                    Next
-                                </button>
-                            </div>
+            <ListPageShell
+                title="Users"
+                subtitle="Manage team access, role assignment, and account activity from one tighter permission workspace."
+                searchValue={searchQuery}
+                searchPlaceholder="Search users..."
+                onSearchChange={setSearchQuery}
+                onAdd={() => setIsModalOpen(true)}
+                addLabel="Add User"
+                actions={(
+                    <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-600">
+                        {safePagination.total || users.length} users
+                    </span>
+                )}
+            >
+                <div className="grid gap-3 md:grid-cols-3">
+                    <div className="rounded-[18px] border border-slate-200 bg-white px-4 py-3 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
+                        <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Active users</div>
+                        <div className="mt-2 text-xl font-extrabold tracking-tight text-slate-950">
+                            {users.filter((user) => user.status === 'Active').length}
                         </div>
-                    )}
-                </SurfaceCard>
-            </PageLayout>
+                    </div>
+                    <div className="rounded-[18px] border border-slate-200 bg-white px-4 py-3 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
+                        <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Admin accounts</div>
+                        <div className="mt-2 flex items-center gap-1.5 text-xl font-extrabold tracking-tight text-slate-950">
+                            <Shield size={15} className="text-amber-600" />
+                            {users.filter((user) => user.role === 'Admin').length}
+                        </div>
+                    </div>
+                    <div className="rounded-[18px] border border-slate-200 bg-white px-4 py-3 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
+                        <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Visible results</div>
+                        <div className="mt-2 flex items-center gap-1.5 text-xl font-extrabold tracking-tight text-slate-950">
+                            <Users size={15} className="text-[#335CFF]" />
+                            {users.length}
+                        </div>
+                    </div>
+                </div>
+
+                <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-3.5 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <select
+                            value={roleFilter}
+                            onChange={(e) => setRoleFilter(e.target.value)}
+                            className="ds-select min-w-[160px]"
+                        >
+                            <option value="">All roles</option>
+                            {roles.map((role) => (
+                                <option key={role._id} value={role.name}>{role.name}</option>
+                            ))}
+                        </select>
+
+                        <button
+                            type="button"
+                            onClick={() => runFetch(1)}
+                            className="btn btn-secondary h-10 px-4"
+                        >
+                            Search
+                        </button>
+
+                        <span className="ml-auto rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                            {users.length} visible
+                        </span>
+
+                        {(searchQuery || roleFilter) && (
+                            <button
+                                type="button"
+                                onClick={handleClearFilters}
+                                className="text-[11px] font-semibold text-slate-500 transition-colors hover:text-[#335CFF]"
+                            >
+                                Reset
+                            </button>
+                        )}
+                    </div>
+                </div>
+
+                <DataTable
+                    rows={users}
+                    columns={columns}
+                    rowKey={(user) => user._id}
+                    loading={loading}
+                    error={null}
+                    emptyMessage="Add the first team member to start managing CRM access and role assignments."
+                    page={safePagination.page}
+                    totalPages={safePagination.pages}
+                    totalItems={safePagination.total || users.length}
+                    onPageChange={(nextPage) => dispatch(fetchUsers({ page: nextPage, limit: 10, search: searchQuery, role: roleFilter }))}
+                />
+            </ListPageShell>
 
             <UserFormModal
                 isOpen={isModalOpen}
@@ -284,7 +278,7 @@ const UsersPage = () => {
                 user={selectedUser}
                 onSuccess={handleSuccess}
             />
-        </MainLayout>
+        </>
     );
 };
 

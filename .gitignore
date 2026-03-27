@@ -1,0 +1,21 @@
+# Root ignores
+node_modules/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# Build outputs
+dist/
+coverage/
+
+# Runtime-generated uploads
+backend/uploads/contracts/
+backend/uploads/logos/
+backend/uploads/proposals/

@@ -1,135 +1,155 @@
 import { Link, useLocation } from 'react-router-dom';
-import { useEffect, useMemo, useState } from 'react';
+import {
+    LayoutDashboard, Users, Building2, Phone, FileText,
+    CheckSquare, BarChart2, TrendingUp, Settings, UserCog,
+    ChevronRight, Zap, Receipt,
+} from 'lucide-react';
 import { useAppSelector, useAppDispatch } from '../../hooks/redux';
 import { logout } from '../../store/slices/authSlice';
-import { LayoutDashboard, Users, Building2, UserCircle, FileText, CheckSquare, LogOut, Settings as SettingsIcon, TrendingUp } from 'lucide-react';
-import api from '../../api/axios';
+import { useNavigate } from 'react-router-dom';
+import { ROUTES } from '../../routes';
+import { cn } from '../../lib/utils';
 
-const BASE_ITEMS = [
-    { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-    { name: 'Leads', path: '/leads', icon: Users },
-    { name: 'Companies', path: '/companies', icon: Building2 },
-    { name: 'Contacts', path: '/contacts', icon: UserCircle },
-    { name: 'Proposals', path: '/proposals', icon: FileText },
-    { name: 'Tasks', path: '/tasks', icon: CheckSquare },
-    { name: 'Reports', path: '/reports', icon: FileText },
-    { name: 'Analytics', path: '/analytics', icon: TrendingUp },
+interface NavItem {
+    label: string;
+    to: string;
+    icon: React.ReactNode;
+    roles?: string[];
+    end?: boolean;
+}
+
+const navGroups: { label: string; items: NavItem[] }[] = [
+    {
+        label: 'Core',
+        items: [
+            { label: 'Dashboard',  to: ROUTES.dashboard,  icon: <LayoutDashboard size={18} />, end: true },
+            { label: 'Leads',      to: ROUTES.leads,       icon: <Users size={18} /> },
+            { label: 'Companies',  to: ROUTES.companies,   icon: <Building2 size={18} /> },
+            { label: 'Contacts',   to: '/contacts',        icon: <Phone size={18} /> },
+            { label: 'Proposals',  to: ROUTES.proposals,   icon: <FileText size={18} /> },
+            { label: 'Invoices',   to: ROUTES.invoices,    icon: <Receipt size={18} /> },
+            { label: 'Subscriptions', to: ROUTES.subscriptions, icon: <CheckSquare size={18} /> },
+            { label: 'Tasks',      to: ROUTES.tasks,       icon: <CheckSquare size={18} /> },
+        ],
+    },
+    {
+        label: 'Insights',
+        items: [
+            { label: 'Reports',    to: '/reports',   icon: <BarChart2 size={18} /> },
+            { label: 'Analytics',  to: '/analytics', icon: <TrendingUp size={18} /> },
+        ],
+    },
+    {
+        label: 'Admin',
+        items: [
+            { label: 'Users',      to: '/users',    icon: <UserCog size={18} />, roles: ['Admin', 'Manager', 'Operator'] },
+            { label: 'Settings',   to: ROUTES.settings, icon: <Settings size={18} /> },
+        ],
+    },
 ];
 
-const Sidebar = () => {
+const NavLink = ({ item }: { item: NavItem }) => {
     const location = useLocation();
-    const dispatch = useAppDispatch();
-    const { user } = useAppSelector((state) => state.auth);
-
-    const menuItems = useMemo(() => (
-        user?.role === 'Admin'
-            ? [...BASE_ITEMS, { name: 'Users', path: '/users', icon: UserCircle }, { name: 'Settings', path: '/settings', icon: SettingsIcon }]
-            : [...BASE_ITEMS, { name: 'Settings', path: '/settings', icon: SettingsIcon }]
-    ), [user?.role]);
-    const [permissionMap, setPermissionMap] = useState<Record<string, Record<string, boolean>> | null>(null);
-
-    useEffect(() => {
-        const loadPermissions = async () => {
-            try {
-                const response = await api.get('/permissions/me');
-                setPermissionMap(response.data.data.permissions || {});
-            } catch (error) {
-                setPermissionMap(null);
-            }
-        };
-        if (user) {
-            loadPermissions();
-        }
-    }, [user]);
-
-    const filteredMenuItems = useMemo(() => {
-        if (!permissionMap) return menuItems;
-        const moduleMap: Record<string, string> = {
-            Dashboard: 'analytics',
-            Reports: 'reports',
-            Analytics: 'analytics',
-            Leads: 'leads',
-            Companies: 'companies',
-            Contacts: 'contacts',
-            Proposals: 'proposals',
-            Tasks: 'tasks',
-            Users: 'users',
-            Settings: 'settings'
-        };
-
-        return menuItems.filter((item) => {
-            const moduleKey = moduleMap[item.name];
-            if (!moduleKey) return true;
-            return !!permissionMap?.[moduleKey]?.view;
-        });
-    }, [menuItems, permissionMap]);
-
-    const isActive = (path: string) => {
-        return location.pathname.startsWith(path);
-    };
-
-    const handleLogout = () => {
-        dispatch(logout());
-    };
+    const isActive = item.end
+        ? location.pathname === item.to
+        : location.pathname.startsWith(item.to);
 
     return (
-        <div className="w-72 bg-secondary-950 text-secondary-50 h-screen sticky top-0 transition-all duration-300 flex flex-col border-r border-white/5 shadow-2xl z-20 overflow-hidden">
-            {/* Logo Section */}
-            <div className="p-8 pb-4 relative overflow-hidden group">
-                <div className="absolute -top-10 -left-10 w-24 h-24 bg-primary-500/10 rounded-full blur-3xl group-hover:bg-primary-500/20 transition-all duration-700"></div>
-                <div className="flex items-center gap-3 relative z-10">
-                    <div className="p-2.5 bg-gradient-to-br from-primary-400 to-primary-600 rounded-xl shadow-lg shadow-primary-500/20">
-                        <LayoutDashboard className="text-secondary-950" size={24} />
-                    </div>
-                    <div>
-                        <h1 className="text-xl font-bold tracking-tight text-white">ThinkTanker</h1>
-                        <p className="text-[10px] uppercase tracking-widest text-primary-500/80 font-bold">CRM Suite</p>
-                    </div>
+        <Link
+            to={item.to}
+            className={cn(
+                'sidebar-link group',
+                isActive && 'sidebar-link-active'
+            )}
+        >
+            <span className={cn('flex-shrink-0', isActive ? 'text-brand-600' : 'text-slate-400 group-hover:text-slate-600')}>
+                {item.icon}
+            </span>
+            <span className="flex-1 text-sm">{item.label}</span>
+            {isActive && <ChevronRight size={14} className="text-brand-400 flex-shrink-0" />}
+        </Link>
+    );
+};
+
+const Sidebar = () => {
+    const { user } = useAppSelector((state) => state.auth);
+    const dispatch = useAppDispatch();
+    const navigate = useNavigate();
+
+    const handleLogout = async () => {
+        await dispatch(logout());
+        navigate('/login');
+    };
+
+    const userRole = user?.role || '';
+    const initials = user
+        ? `${user.firstName?.[0] ?? ''}${user.lastName?.[0] ?? ''}`.toUpperCase()
+        : '?';
+
+    return (
+        <aside className="flex h-screen w-[248px] flex-shrink-0 flex-col border-r border-slate-200/90 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] shadow-[10px_0_24px_rgba(15,23,42,0.03)] backdrop-blur-xl">
+            {/* Logo */}
+            <div className="flex items-center gap-3 border-b border-slate-200/80 px-5 py-5">
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[linear-gradient(180deg,#335CFF_0%,#2649D8_100%)] text-white shadow-[0_10px_22px_rgba(51,92,255,0.24)] flex-shrink-0">
+                    <Zap size={18} fill="white" />
+                </div>
+                <div>
+                    <p className="text-sm font-extrabold tracking-[-0.03em] text-slate-900 leading-none">ThinkTanker</p>
+                    <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400">Revenue CRM</p>
                 </div>
             </div>
 
             {/* Navigation */}
-            <nav className="flex-1 px-4 py-8 space-y-1.5">
-                {filteredMenuItems.map((item) => {
-                    const Icon = item.icon;
-                    const active = isActive(item.path);
+            <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-6">
+                {navGroups.map((group) => {
+                    const visibleItems = group.items.filter((item) =>
+                        !item.roles || item.roles.includes(userRole)
+                    );
+                    if (visibleItems.length === 0) return null;
+
                     return (
-                        <Link
-                            key={item.name}
-                            to={item.path}
-                            className={`sidebar-link group ${active ? 'sidebar-link-active shadow-lg shadow-primary-500/5' : 'text-secondary-400 hover:bg-white/5 hover:text-secondary-50'}`}
-                        >
-                            <Icon size={20} className={active ? 'text-primary-400' : 'text-secondary-500 group-hover:text-secondary-300'} />
-                            <span className="text-sm font-medium">{item.name}</span>
-                        </Link>
+                        <div key={group.label}>
+                            <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                                {group.label}
+                            </p>
+                            <div className="space-y-0.5">
+                                {visibleItems.map((item) => (
+                                    <NavLink key={item.to} item={item} />
+                                ))}
+                            </div>
+                        </div>
                     );
                 })}
             </nav>
 
-            {/* User Profile Section */}
-            <div className="p-6 mt-auto">
-                <div className="rounded-2xl border border-amber-200/20 bg-gradient-to-br from-[#1b1b1b] via-[#1f1f1f] to-[#151515] p-4 shadow-[0_18px_40px_rgba(0,0,0,0.45)] transition-all duration-300 hover:border-amber-200/30">
-                    <div className="flex items-center gap-3">
-                        <div className="relative h-11 w-11 rounded-xl bg-gradient-to-br from-amber-300 to-amber-500 flex items-center justify-center font-bold text-neutral-900 shadow-[0_8px_18px_rgba(245,158,11,0.3)]">
-                            {user?.firstName?.charAt(0) || 'U'}
-                            <span className="absolute -bottom-1 -right-1 h-3 w-3 rounded-full border-2 border-[#151515] bg-emerald-400" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-amber-50 truncate">{user?.firstName} {user?.lastName}</p>
-                            <p className="text-[10px] text-amber-200/70 font-semibold uppercase tracking-[0.22em] truncate">{user?.role}</p>
-                        </div>
+            {/* User Card */}
+            <div className="border-t border-slate-200/80 px-4 pb-5 pt-4">
+                <div className="group flex items-center gap-3 rounded-[20px] border border-slate-200 bg-white p-3.5 shadow-[0_8px_20px_rgba(15,23,42,0.04)] transition-all hover:border-[#BED0FF] hover:bg-white">
+                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-[#E9EEFF] text-[#335CFF] text-xs font-bold ring-2 ring-[#E9EEFF]">
+                        {initials}
                     </div>
-                    <div className="mt-4 h-px w-full bg-gradient-to-r from-transparent via-amber-100/20 to-transparent" />
+                    <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-slate-800 truncate">
+                            {user?.firstName} {user?.lastName}
+                        </p>
+                        <p className="text-[10px] uppercase tracking-widest text-slate-400 font-medium">
+                            {userRole}
+                        </p>
+                    </div>
                     <button
                         onClick={handleLogout}
-                        className="mt-3 w-full flex items-center justify-center gap-2 rounded-lg border border-amber-200/20 bg-[#1a1a1a] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-amber-100/80 transition-all duration-200 hover:border-amber-200/40 hover:text-amber-50"
+                        title="Sign out"
+                        className="rounded-xl p-2 text-slate-400 opacity-0 transition-all group-hover:opacity-100 hover:bg-red-50 hover:text-red-500"
                     >
-                        <LogOut size={14} />
-                        <span>Sign Out</span>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+                            <polyline points="16 17 21 12 16 7" />
+                            <line x1="21" y1="12" x2="9" y2="12" />
+                        </svg>
                     </button>
                 </div>
             </div>
-        </div>
+        </aside>
     );
 };
 
