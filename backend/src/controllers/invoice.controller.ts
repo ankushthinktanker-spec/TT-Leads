@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import mongoose from 'mongoose';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { AppError } from '../middleware/errorHandler';
+import { Roles } from '../constants/roles';
 import { createInvoiceSchema, updateInvoiceSchema } from '../validators/invoice.validator';
 import { buildPaginationMeta, getPaginationParams } from '../utils/pagination';
 import { applySearchFilter, getDateRangeParam, getSearchTerm, getStringParam, getTagsParam } from '../utils/queryFilters';
@@ -9,13 +10,26 @@ import { createInvoice, deleteInvoice, getInvoiceById, listInvoices, updateInvoi
 import type { IInvoice } from '../models/invoice.model';
 import { writeAuditLog } from '../services/audit.service';
 
+type InvoiceAccessTarget = { ownerId?: mongoose.Types.ObjectId; createdBy?: mongoose.Types.ObjectId };
+
+const toAuditChanges = (value: { toObject: () => unknown }): Record<string, unknown> =>
+    value.toObject() as Record<string, unknown>;
+
+const canAccessInvoice = (req: AuthRequest, invoice: InvoiceAccessTarget): boolean => {
+    const role = req.user!.role;
+    if (role === Roles.ADMIN || role === Roles.MANAGER) return true;
+    const userId = req.user!._id.toString();
+    const ownerId = invoice.ownerId?.toString() || invoice.createdBy?.toString();
+    return userId === ownerId;
+};
+
 type InvoiceFilter = Record<string, unknown>;
 
 const buildInvoiceFilter = (req: AuthRequest): InvoiceFilter => {
     const filter: InvoiceFilter = { tenantId: req.tenantId! };
     const user = req.user!;
 
-    if (user.role !== 'Admin' && user.role !== 'Manager') {
+    if (user.role !== Roles.ADMIN && user.role !== Roles.MANAGER) {
         filter.$or = [{ createdBy: user._id }, { ownerId: user._id }];
     }
 
@@ -71,7 +85,7 @@ export const getInvoices = async (req: AuthRequest, res: Response, next: NextFun
         res.status(200).json({
             success: true,
             data: {
-                items,
+                data: items,
                 meta: buildPaginationMeta(page, limit, total)
             }
         });
@@ -105,7 +119,7 @@ export const getInvoice = async (req: AuthRequest, res: Response, next: NextFunc
 // @access  Private
 export const createInvoiceHandler = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const { error, value } = createInvoiceSchema.validate(req.body);
+        const { error, value } = createInvoiceSchema.validate(req.body, { stripUnknown: true });
         if (error) {
             throw new AppError(error.details[0].message, 400);
         }
@@ -125,7 +139,7 @@ export const createInvoiceHandler = async (req: AuthRequest, res: Response, next
             entityType: 'Invoice',
             entityId: invoice._id.toString(),
             ip: req.ip,
-            changes: invoice.toObject() as any
+            changes: toAuditChanges(invoice)
         });
 
         res.status(201).json({
@@ -147,7 +161,7 @@ export const updateInvoiceHandler = async (req: AuthRequest, res: Response, next
             throw new AppError('Invalid invoice identifier', 400);
         }
 
-        const { error, value } = updateInvoiceSchema.validate(req.body);
+        const { error, value } = updateInvoiceSchema.validate(req.body, { stripUnknown: true });
         if (error) {
             throw new AppError(error.details[0].message, 400);
         }
@@ -155,6 +169,10 @@ export const updateInvoiceHandler = async (req: AuthRequest, res: Response, next
         const beforeUpdate = await getInvoiceById(req.tenantId!, req.params.id);
         if (!beforeUpdate) {
             throw new AppError('Invoice not found or unauthorized access', 404);
+        }
+
+        if (!canAccessInvoice(req, beforeUpdate)) {
+            throw new AppError('You do not have permission to modify this invoice', 403);
         }
 
         const invoice = await updateInvoice(req.tenantId!, req.params.id, value);
@@ -170,7 +188,7 @@ export const updateInvoiceHandler = async (req: AuthRequest, res: Response, next
             entityType: 'Invoice',
             entityId: invoice._id.toString(),
             ip: req.ip,
-            changes: { before: beforeUpdate.toObject() as any, after: invoice.toObject() as any }
+            changes: { before: toAuditChanges(beforeUpdate), after: toAuditChanges(invoice) }
         });
 
         res.status(200).json({
@@ -197,6 +215,10 @@ export const deleteInvoiceHandler = async (req: AuthRequest, res: Response, next
             throw new AppError('Invoice not found or unauthorized access', 404);
         }
 
+        if (!canAccessInvoice(req, invoice)) {
+            throw new AppError('You do not have permission to modify this invoice', 403);
+        }
+
         // 📍 SECURITY: Audit Log Delete
         await writeAuditLog({
             tenantId: req.tenantId!,
@@ -205,7 +227,7 @@ export const deleteInvoiceHandler = async (req: AuthRequest, res: Response, next
             entityType: 'Invoice',
             entityId: invoice._id.toString(),
             ip: req.ip,
-            changes: invoice.toObject() as any
+            changes: toAuditChanges(invoice)
         });
 
         const deleted = await deleteInvoice(req.tenantId!, req.params.id);

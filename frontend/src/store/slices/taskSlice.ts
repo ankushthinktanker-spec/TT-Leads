@@ -24,7 +24,7 @@ interface TaskState {
     pagination: {
         total: number;
         page: number;
-        pages: number;
+        totalPages: number;
         limit: number;
     };
 }
@@ -34,11 +34,11 @@ interface TaskApiResponse<T> {
 }
 
 interface TaskListPayload {
-    tasks?: Task[];
-    pagination: {
+    data?: Task[];
+    meta: {
         total?: number;
         page?: number;
-        pages?: number;
+        totalPages?: number;
         limit?: number;
     };
 }
@@ -55,7 +55,7 @@ const initialState: TaskState = {
     pagination: {
         total: 0,
         page: 1,
-        pages: 1,
+        totalPages: 1,
         limit: 10,
     },
 };
@@ -148,18 +148,15 @@ const taskSlice = createSlice({
             })
             .addCase(fetchTasks.fulfilled, (state, action: PayloadAction<TaskApiResponse<TaskListPayload>>) => {
                 state.loading = false;
-                const data = (action.payload?.data || {}) as TaskListPayload & {
-                    items?: TaskApi[];
-                    meta?: TaskListPayload['pagination'];
-                };
-                const pagination = data.pagination || data.meta || {};
-                const items = data.tasks || data.items || [];
+                const data = (action.payload?.data || {}) as TaskListPayload;
+                const meta = data.meta || {};
+                const items = data.data || [];
                 state.tasks = items.map(normalizeTask);
                 state.pagination = {
-                    total: pagination.total || 0,
-                    page: pagination.page || 1,
-                    pages: pagination.pages || 1,
-                    limit: pagination.limit || 10,
+                    total: meta.total || 0,
+                    page: meta.page || 1,
+                    totalPages: meta.totalPages || 1,
+                    limit: meta.limit || 10,
                 };
             })
             .addCase(fetchTasks.rejected, (state, action) => {

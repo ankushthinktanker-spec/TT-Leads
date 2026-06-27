@@ -1,5 +1,6 @@
-import dotenv from 'dotenv';
+﻿import dotenv from 'dotenv';
 import Joi from 'joi';
+import type { RuntimeMode } from './mode';
 
 dotenv.config();
 
@@ -7,8 +8,10 @@ type NodeEnv = 'development' | 'test' | 'production';
 
 interface EnvConfig {
     NODE_ENV: NodeEnv;
+    RUNTIME_MODE: RuntimeMode;
     PORT: number;
-    MONGODB_URI: string;
+    MONGODB_URI?: string;
+    TEST_MONGODB_URI?: string;
     JWT_SECRET: string;
     JWT_REFRESH_SECRET: string;
     JWT_EXPIRE: string;
@@ -24,8 +27,18 @@ interface EnvConfig {
 
 const envSchema = Joi.object<EnvConfig>({
     NODE_ENV: Joi.string().valid('development', 'test', 'production').default('development'),
+    RUNTIME_MODE: Joi.string().valid('dev', 'test', 'release').default('dev'),
     PORT: Joi.number().integer().min(1).max(65535).default(5000),
-    MONGODB_URI: Joi.string().required(),
+    MONGODB_URI: Joi.string().when('RUNTIME_MODE', {
+        is: 'release',
+        then: Joi.string().required(),
+        otherwise: Joi.string().optional(),
+    }),
+    TEST_MONGODB_URI: Joi.string().when('RUNTIME_MODE', {
+        is: 'test',
+        then: Joi.string().required(),
+        otherwise: Joi.string().optional(),
+    }),
     JWT_SECRET: Joi.string().min(32).required(),
     JWT_REFRESH_SECRET: Joi.string().min(32).required(),
     JWT_EXPIRE: Joi.string().default('15m'),
@@ -36,14 +49,14 @@ const envSchema = Joi.object<EnvConfig>({
     REQUEST_TIMEOUT_MS: Joi.number().integer().min(5000).max(120000).default(20000),
     RATE_LIMIT_WINDOW_MS: Joi.number().integer().min(60000).default(900000),
     RATE_LIMIT_MAX_REQUESTS: Joi.number().integer().min(20).default(100),
-    DATA_ENCRYPTION_KEY: Joi.string().min(32).required()
+    DATA_ENCRYPTION_KEY: Joi.string().min(32).required(),
 })
     .unknown(true)
     .required();
 
 const { value, error } = envSchema.validate(process.env, {
     abortEarly: false,
-    convert: true
+    convert: true,
 });
 
 if (error) {
@@ -52,3 +65,5 @@ if (error) {
 }
 
 export const env = value as EnvConfig;
+export const RUNTIME_MODE = env.RUNTIME_MODE;
+export const TEST_MONGODB_URI = env.TEST_MONGODB_URI;

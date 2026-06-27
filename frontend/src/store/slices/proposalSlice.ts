@@ -84,15 +84,15 @@ interface ProposalState {
     pagination: {
         total: number;
         page: number;
-        pages: number;
+        totalPages: number;
         limit: number;
     };
 }
 
 interface ProposalListPayload {
-    items?: Proposal[];
+    data?: Proposal[];
     meta?: {
-        totalItems?: number;
+        total?: number;
         page?: number;
         totalPages?: number;
         limit?: number;
@@ -128,7 +128,7 @@ const initialState: ProposalState = {
     pagination: {
         total: 0,
         page: 1,
-        pages: 1,
+        totalPages: 1,
         limit: 10,
     },
 };
@@ -244,6 +244,10 @@ const proposalSlice = createSlice({
     name: 'proposals',
     initialState,
     reducers: {
+        clearCurrentProposal: (state) => {
+            state.currentProposal = null;
+            state.error = null;
+        },
     },
     extraReducers: (builder) => {
         builder
@@ -254,18 +258,13 @@ const proposalSlice = createSlice({
             })
             .addCase(fetchProposals.fulfilled, (state, action: PayloadAction<{ data: ProposalListPayload }>) => {
                 state.loading = false;
-                const data = (action.payload?.data || {}) as ProposalListPayload & {
-                    proposals?: Proposal[];
-                };
-                const meta = (data.meta || (action.payload as { pagination?: ProposalListPayload['meta'] })?.pagination || {}) as ProposalListPayload['meta'] & {
-                    total?: number;
-                    pages?: number;
-                };
-                state.proposals = data.items || data.proposals || [];
+                const data = (action.payload?.data || {}) as ProposalListPayload;
+                const meta = data.meta || {};
+                state.proposals = data.data || [];
                 state.pagination = {
-                    total: meta?.totalItems || meta?.total || 0,
+                    total: meta?.total || 0,
                     page: meta?.page || 1,
-                    pages: meta?.totalPages || meta?.pages || 1,
+                    totalPages: meta?.totalPages || 1,
                     limit: meta?.limit || 10,
                 };
             })
@@ -409,5 +408,6 @@ const proposalSlice = createSlice({
     },
 });
 
+export const { clearCurrentProposal } = proposalSlice.actions;
 export default proposalSlice.reducer;
 

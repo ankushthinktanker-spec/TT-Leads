@@ -1,5 +1,6 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import axios, { type ApiRequestConfig } from '../../api/axios';
+import { isAxiosError } from 'axios';
+import apiClient, { type ApiRequestConfig } from '../../api/axios';
 import { getErrorMessage } from '../../utils/error';
 import {
     getAccessToken,
@@ -48,15 +49,22 @@ export const login = createAsyncThunk(
         try {
             const { remember = true, ...payload } = credentials;
             clearAuthStorage();
-            const response = await axios.post('/auth/login', payload, { _skipAuth: true } as ApiRequestConfig);
+            const response = await apiClient.post('/auth/login', payload, { _skipAuth: true } as ApiRequestConfig);
             const { user, token, refreshToken } = response.data.data;
+
+            if (response.status === 202 || response.data?.data?.mfaRequired || !user || !token || !refreshToken) {
+                return rejectWithValue('MFA login is not supported in the current UI yet.');
+            }
 
             setStoredUser(user, remember);
             setTokens(token, refreshToken, remember);
 
             return { user, token, refreshToken };
         } catch (error: unknown) {
-            return rejectWithValue(getErrorMessage(error, 'Login failed'));
+            if (isAxiosError(error) && !error.response) {
+                return rejectWithValue('Unable to reach the workspace server. Start the backend on http://localhost:5000 and try again.');
+            }
+            return rejectWithValue(getErrorMessage(error, 'We could not complete sign in. Please try again.'));
         }
     }
 );
@@ -71,7 +79,7 @@ const register = createAsyncThunk(
     'auth/register',
     async (userData: Record<string, unknown>, { rejectWithValue }) => {
         try {
-            const response = await axios.post('/auth/register', userData);
+            const response = await apiClient.post('/auth/register', userData);
             const { user, token, refreshToken } = response.data.data;
 
             setStoredUser(user, true);
@@ -88,7 +96,7 @@ const getMe = createAsyncThunk(
     'auth/getMe',
     async (_, { rejectWithValue }) => {
         try {
-            const response = await axios.get('/auth/me');
+            const response = await apiClient.get('/auth/me');
             return response.data.data.user;
         } catch (error: unknown) {
             return rejectWithValue(getErrorMessage(error, 'Failed to fetch user'));
@@ -100,7 +108,7 @@ export const updateProfile = createAsyncThunk(
     'auth/updateProfile',
     async (userData: Record<string, unknown>, { rejectWithValue }) => {
         try {
-            const response = await axios.put('/auth/profile', userData);
+            const response = await apiClient.put('/auth/profile', userData);
             const user = response.data.data.user;
             setStoredUser(user, getTokenStorageType() === 'local');
             return user;
@@ -112,7 +120,7 @@ export const updateProfile = createAsyncThunk(
 
 export const logout = createAsyncThunk('auth/logout', async () => {
         try {
-            await axios.post('/auth/logout', undefined, { _skipAuth: true } as ApiRequestConfig);
+            await apiClient.post('/auth/logout');
         } catch (error) {
         // Ignore errors on logout
     } finally {

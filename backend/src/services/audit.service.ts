@@ -40,7 +40,7 @@ export const writeAuditLog = async (input: AuditInput): Promise<void> => {
             previousHash,
             hash
         });
-    } catch {
-        // Non-blocking audit fallback
+    } catch (error) {
+        console.error('Audit log write failed:', error);
     }
 };

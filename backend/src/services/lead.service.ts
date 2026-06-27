@@ -20,7 +20,7 @@ export class LeadService {
         skip = 0, 
         limit = 50, 
         sortParam = '-createdAt'
-    ): Promise<{ items: any[], total: number }> {
+    ): Promise<{ items: ILead[]; total: number }> {
         
         // Define repository options securely
         const queryOptions = {

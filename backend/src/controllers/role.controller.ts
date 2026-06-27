@@ -7,9 +7,13 @@ import { AppError } from '../middleware/errorHandler';
 import { emptyPermissions, getEffectivePermissions, mergePermissions, sanitizePermissions } from '../utils/permission.utils';
 import { writeAuditLog } from '../services/audit.service';
 
-export const getRoles = async (_req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+// Returns system roles + this tenant's custom roles
+export const getRoles = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const roles = await Role.find().sort({ name: 1 }).lean();
+        const query = req.tenantId
+            ? { $or: [{ tenantId: { $exists: false } }, { tenantId: req.tenantId }] }
+            : { tenantId: { $exists: false } };
+        const roles = await Role.find(query).sort({ name: 1 }).lean();
         res.status(200).json({ success: true, data: { roles } });
     } catch (error) {
         next(error);
@@ -29,7 +33,11 @@ export const createRole = async (req: AuthRequest, res: Response, next: NextFunc
             throw new AppError('Role name is required', 400);
         }
 
-        const existing = await Role.findOne({ name: trimmed });
+        // P1-4 fix: check uniqueness within this tenant's scope only
+        const existing = await Role.findOne({
+            name: trimmed,
+            $or: [{ tenantId: { $exists: false } }, { tenantId: req.tenantId }]
+        });
         if (existing) {
             throw new AppError('Role already exists', 400);
         }
@@ -38,6 +46,7 @@ export const createRole = async (req: AuthRequest, res: Response, next: NextFunc
             name: trimmed,
             description: typeof description === 'string' ? description.trim() : '',
             isSystem: false,
+            tenantId: req.tenantId,
             createdBy: req.user?._id
         });
 
@@ -47,12 +56,13 @@ export const createRole = async (req: AuthRequest, res: Response, next: NextFunc
             if (!baseRoleDoc) {
                 throw new AppError('Base role not found', 400);
             }
-            basePermissions = await getEffectivePermissions(baseRole);
+            basePermissions = await getEffectivePermissions(baseRole, req.tenantId);
         }
         const sanitized = sanitizePermissions(permissions || {});
         const merged = mergePermissions(basePermissions, sanitized);
 
         await RolePermission.create({
+            tenantId: req.tenantId,
             role: trimmed,
             permissions: merged,
             updatedBy: req.user?._id
@@ -83,7 +93,11 @@ export const updateRole = async (req: AuthRequest, res: Response, next: NextFunc
         const { name, description } = req.body || {};
         const roleId = req.params.id;
 
-        const role = await Role.findById(roleId);
+        // Scope to system roles + this tenant's custom roles
+        const role = await Role.findOne({
+            _id: roleId,
+            $or: [{ tenantId: { $exists: false } }, { tenantId: req.tenantId }]
+        });
         if (!role) {
             throw new AppError('Role not found', 404);
         }
@@ -93,13 +107,16 @@ export const updateRole = async (req: AuthRequest, res: Response, next: NextFunc
         }
 
         if (name && name !== role.name) {
-            const exists = await Role.findOne({ name });
+            const exists = await Role.findOne({
+                name,
+                $or: [{ tenantId: { $exists: false } }, { tenantId: req.tenantId }]
+            });
             if (exists) {
                 throw new AppError('Role name already exists', 400);
             }
 
-            await User.updateMany({ role: role.name }, { $set: { role: name } });
-            await RolePermission.updateMany({ role: role.name }, { $set: { role: name } });
+            await User.updateMany({ role: role.name, tenantId: req.tenantId }, { $set: { role: name } });
+            await RolePermission.updateMany({ role: role.name, tenantId: req.tenantId }, { $set: { role: name } });
             role.name = name;
         }
 
@@ -129,8 +146,9 @@ export const updateRole = async (req: AuthRequest, res: Response, next: NextFunc
 export const deleteRole = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
         const roleId = req.params.id;
-        const role = await Role.findById(roleId);
 
+        // Only allow deleting this tenant's custom roles
+        const role = await Role.findOne({ _id: roleId, tenantId: req.tenantId });
         if (!role) {
             throw new AppError('Role not found', 404);
         }
@@ -139,12 +157,12 @@ export const deleteRole = async (req: AuthRequest, res: Response, next: NextFunc
             throw new AppError('System roles cannot be deleted', 400);
         }
 
-        const inUse = await User.exists({ role: role.name });
+        const inUse = await User.exists({ role: role.name, tenantId: req.tenantId });
         if (inUse) {
             throw new AppError('Role is assigned to users and cannot be deleted', 400);
         }
 
-        await RolePermission.deleteMany({ role: role.name });
+        await RolePermission.deleteMany({ role: role.name, tenantId: req.tenantId });
         await role.deleteOne();
 
         res.status(200).json({ success: true, message: 'Role deleted' });

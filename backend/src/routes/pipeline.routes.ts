@@ -12,6 +12,7 @@ import {
 } from '../controllers/pipeline.controller';
 import { protect, authorize } from '../middleware/auth.middleware';
 import { checkPermission } from '../middleware/permission.middleware';
+import { Roles } from '../constants/roles';
 
 const router = express.Router();
 
@@ -24,7 +25,7 @@ router.route('/')
 router.route('/:id')
     .get(checkPermission('pipelines', 'view'), getPipeline)
     .put(checkPermission('pipelines', 'edit'), updatePipelineHandler)
-    .delete(authorize('Admin', 'Manager'), checkPermission('pipelines', 'delete'), deletePipelineHandler);
+    .delete(authorize(Roles.ADMIN, Roles.MANAGER), checkPermission('pipelines', 'delete'), deletePipelineHandler);
 
 router.post('/:id/stages', checkPermission('pipelines', 'edit'), addPipelineStageHandler);
 router.put('/:id/stages/:stageId', checkPermission('pipelines', 'edit'), updatePipelineStageHandler);

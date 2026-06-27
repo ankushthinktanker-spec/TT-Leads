@@ -68,18 +68,7 @@ const ModuleToolbar = ({
                             <Filter size={14} />
                             Filters
                             {activeFilters.length > 0 && (
-                                <span style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    width: 18,
-                                    height: 18,
-                                    borderRadius: '50%',
-                                    background: 'var(--mod-primary)',
-                                    color: 'white',
-                                    fontSize: 10,
-                                    fontWeight: 700,
-                                }}>{activeFilters.length}</span>
+                                <span className="mod-toolbar__badge">{activeFilters.length}</span>
                             )}
                         </button>
                     )}

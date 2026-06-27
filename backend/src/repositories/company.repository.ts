@@ -1,5 +1,6 @@
 import { BaseRepository } from './base.repository';
 import Company, { ICompany } from '../models/company.model';
+import { escapeRegex } from '../utils/regex.utils';
 
 /**
  * CompanyRepository
@@ -16,7 +17,7 @@ export class CompanyRepository extends BaseRepository<ICompany> {
      */
     async findByName(tenantId: string, name: string) {
         return this.findOne(tenantId, { 
-            name: { $regex: new RegExp(`^${name}$`, 'i') } 
+            name: { $regex: new RegExp(`^${escapeRegex(name)}$`, 'i') }
         });
     }
 

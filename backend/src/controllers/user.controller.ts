@@ -4,6 +4,8 @@ import User from '../models/user.model';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { writeAuditLog } from '../services/audit.service';
+import { escapeRegex } from '../utils/regex.utils';
+import { getPaginationParams, buildPaginationMeta } from '../utils/pagination';
 
 const USER_UPDATE_ALLOWLIST = new Set([
     'firstName',
@@ -29,41 +31,39 @@ export const getUsers = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        const { page = 1, limit = 10, search, role, status } = req.query;
+        const { search, role, status } = req.query;
 
         const filter: Record<string, unknown> = { tenantId: req.tenantId! };
         if (role) filter.role = role;
         if (status) filter.status = status;
         if (search) {
+            const escapedSearch = escapeRegex(search as string);
             filter.$or = [
-                { firstName: { $regex: search, $options: 'i' } },
-                { lastName: { $regex: search, $options: 'i' } },
-                { email: { $regex: search, $options: 'i' } }
+                { firstName: { $regex: escapedSearch, $options: 'i' } },
+                { lastName: { $regex: escapedSearch, $options: 'i' } },
+                { email: { $regex: escapedSearch, $options: 'i' } }
             ];
         }
 
-        const skip = (Number(page) - 1) * Number(limit);
+        const { page, limit, skip } = getPaginationParams(req.query as Record<string, unknown>);
 
         const users = await User.find(filter)
             .select('-password')
             .populate('teamId', 'name')
             .populate('managerId', 'firstName lastName')
             .skip(skip)
-            .limit(Number(limit))
-            .sort({ createdAt: -1 });
+            .limit(limit)
+            .sort({ createdAt: -1 })
+            .lean();
 
         const total = await User.countDocuments(filter);
 
         res.status(200).json({
             success: true,
-            count: users.length,
-            pagination: {
-                page: Number(page),
-                limit: Number(limit),
-                total,
-                pages: Math.ceil(total / Number(limit))
-            },
-            data: { users }
+            data: {
+                data: users,
+                meta: buildPaginationMeta(page, limit, total)
+            }
         });
     } catch (error) {
         next(error);

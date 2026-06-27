@@ -2,11 +2,15 @@ import { Response, NextFunction } from 'express';
 import Company from '../models/company.model';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth.middleware';
+import { Roles } from '../constants/roles';
 import { createCompanySchema, updateCompanySchema } from '../validators/company.validator';
 import mongoose from 'mongoose';
 import { getPaginationParams, buildPaginationMeta } from '../utils/pagination';
 import { getSearchTerm, applySearchFilter } from '../utils/queryFilters';
 import { writeAuditLog } from '../services/audit.service';
+
+const toAuditChanges = (value: { toObject: () => unknown }): Record<string, unknown> =>
+    value.toObject() as unknown as Record<string, unknown>;
 
 // @desc    Get all companies
 // @route   GET /api/companies
@@ -28,7 +32,7 @@ export const getCompanies = async (
         // Build filter - Critical Tenant Isolation
         const filter: Record<string, unknown> = { tenantId: req.tenantId! };
 
-        if (req.user!.role !== 'Admin' && req.user!.role !== 'Manager') {
+        if (req.user!.role !== Roles.ADMIN && req.user!.role !== Roles.MANAGER) {
             filter.createdBy = req.user!._id;
         }
 
@@ -49,14 +53,15 @@ export const getCompanies = async (
             .populate('createdBy', 'firstName lastName email')
             .sort(sort)
             .skip(skip)
-            .limit(limit);
+            .limit(limit)
+            .lean();
 
         const total = await Company.countDocuments(filter);
 
         res.status(200).json({
             success: true,
             data: {
-                items: companies,
+                data: companies,
                 meta: buildPaginationMeta(page, limit, total)
             }
         });
@@ -103,7 +108,7 @@ export const createCompany = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        const { error, value } = createCompanySchema.validate(req.body);
+        const { error, value } = createCompanySchema.validate(req.body, { stripUnknown: true });
         if (error) {
             throw new AppError(error.details[0].message, 400);
         }
@@ -122,7 +127,7 @@ export const createCompany = async (
             entityType: 'Company',
             entityId: company._id.toString(),
             ip: req.ip,
-            changes: company.toObject() as any
+            changes: toAuditChanges(company)
         });
 
         res.status(201).json({
@@ -148,7 +153,7 @@ export const updateCompany = async (
             throw new AppError('Invalid company identifier', 400);
         }
 
-        const { error, value } = updateCompanySchema.validate(req.body);
+        const { error, value } = updateCompanySchema.validate(req.body, { stripUnknown: true });
         if (error) {
             throw new AppError(error.details[0].message, 400);
         }
@@ -158,11 +163,11 @@ export const updateCompany = async (
             throw new AppError('Company not found or unauthorized access', 404);
         }
 
-        const beforeUpdate = company.toObject();
+        const beforeUpdate = toAuditChanges(company);
 
         if (
-            req.user!.role !== 'Admin' &&
-            req.user!.role !== 'Manager' &&
+            req.user!.role !== Roles.ADMIN &&
+            req.user!.role !== Roles.MANAGER &&
             company.createdBy.toString() !== req.user!._id.toString()
         ) {
             throw new AppError('Not authorized to update this company', 403);
@@ -186,7 +191,7 @@ export const updateCompany = async (
             entityType: 'Company',
             entityId: updatedCompany._id.toString(),
             ip: req.ip,
-            changes: { before: beforeUpdate as any, after: updatedCompany.toObject() as any }
+            changes: { before: beforeUpdate, after: toAuditChanges(updatedCompany) }
         });
 
         res.status(200).json({
@@ -218,8 +223,8 @@ export const deleteCompany = async (
         }
 
         if (
-            req.user!.role !== 'Admin' &&
-            req.user!.role !== 'Manager' &&
+            req.user!.role !== Roles.ADMIN &&
+            req.user!.role !== Roles.MANAGER &&
             company.createdBy.toString() !== req.user!._id.toString()
         ) {
             throw new AppError('Not authorized to delete this company', 403);
@@ -233,7 +238,7 @@ export const deleteCompany = async (
             entityType: 'Company',
             entityId: company._id.toString(),
             ip: req.ip,
-            changes: company.toObject() as any
+            changes: toAuditChanges(company)
         });
 
         await company.deleteOne();

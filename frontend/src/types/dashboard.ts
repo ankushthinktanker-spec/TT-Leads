@@ -37,13 +37,17 @@ export type StuckLead = {
 
 export type DashboardKpis = {
     wonCount?: number;
+    wonValue?: number;
     lostCount?: number;
+    lostValue?: number;
     avgFirstResponseMins?: number;
     totalLeads?: number;
     newLeads?: number;
     openLeads?: number;
     qualifiedLeads?: number;
     followUpsDueToday?: number;
+    totalPipelineValue?: number;
+    weightedPipelineValue?: number;
 };
 
 export type DashboardSourceRow = {
@@ -80,6 +84,11 @@ export type DashboardData = {
     followups?: { leads?: LeadFollowupBuckets };
     pipeline?: { byStageCount?: PipelineRow[]; stuckLeads?: unknown[] };
     sources?: DashboardSourceRow[];
+    forecast?: {
+        expectedThisMonth?: number;
+        nextMonthPipeline?: number;
+        avgDealSize?: number;
+    };
     recentActivity?: DashboardActivity[];
     alerts?: DashboardAlerts;
 };

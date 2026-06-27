@@ -3,6 +3,7 @@ import path from 'path';
 import { promises as fs } from 'fs';
 import mongoose from 'mongoose';
 import { AuthRequest } from '../middleware/auth.middleware';
+import { Roles } from '../constants/roles';
 import { AppError } from '../middleware/errorHandler';
 import { createContractSchema, updateContractSchema } from '../validators/contract.validator';
 import { buildPaginationMeta, getPaginationParams } from '../utils/pagination';
@@ -20,12 +21,15 @@ import type { IContract } from '../models/contract.model';
 import { scanFilePlaceholder } from '../utils/fileSecurity.utils';
 import { writeAuditLog } from '../services/audit.service';
 
+const toAuditChanges = (value: { toObject: () => unknown }): Record<string, unknown> =>
+    value.toObject() as Record<string, unknown>;
+
 type ContractFilter = Record<string, unknown>;
 type AccessTarget = { createdBy?: mongoose.Types.ObjectId; ownerId?: mongoose.Types.ObjectId };
 
 const canAccessContract = (contract: AccessTarget, user: AuthRequest['user']) => {
     if (!user) return false;
-    if (user.role === 'Admin' || user.role === 'Manager') return true;
+    if (user.role === Roles.ADMIN || user.role === Roles.MANAGER) return true;
     const userId = String(user._id);
     return String(contract.createdBy || '') === userId || String(contract.ownerId || '') === userId;
 };
@@ -34,7 +38,7 @@ const buildContractFilter = (req: AuthRequest): ContractFilter => {
     const filter: ContractFilter = { tenantId: req.tenantId! };
     const user = req.user!;
 
-    if (user.role !== 'Admin' && user.role !== 'Manager') {
+    if (user.role !== Roles.ADMIN && user.role !== Roles.MANAGER) {
         filter.$or = [{ createdBy: user._id }, { ownerId: user._id }];
     }
 
@@ -87,7 +91,7 @@ export const getContracts = async (req: AuthRequest, res: Response, next: NextFu
         res.status(200).json({
             success: true,
             data: {
-                items,
+                data: items,
                 meta: buildPaginationMeta(page, limit, total)
             }
         });
@@ -124,7 +128,7 @@ export const getContract = async (req: AuthRequest, res: Response, next: NextFun
 // @access  Private
 export const createContractHandler = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const { error, value } = createContractSchema.validate(req.body);
+        const { error, value } = createContractSchema.validate(req.body, { stripUnknown: true });
         if (error) {
             throw new AppError(error.details[0].message, 400);
         }
@@ -144,7 +148,7 @@ export const createContractHandler = async (req: AuthRequest, res: Response, nex
             entityType: 'Contract',
             entityId: contract._id.toString(),
             ip: req.ip,
-            changes: contract.toObject() as any
+            changes: toAuditChanges(contract)
         });
 
         res.status(201).json({
@@ -166,7 +170,7 @@ export const updateContractHandler = async (req: AuthRequest, res: Response, nex
             throw new AppError('Invalid contract identifier', 400);
         }
 
-        const { error, value } = updateContractSchema.validate(req.body);
+        const { error, value } = updateContractSchema.validate(req.body, { stripUnknown: true });
         if (error) {
             throw new AppError(error.details[0].message, 400);
         }
@@ -192,7 +196,7 @@ export const updateContractHandler = async (req: AuthRequest, res: Response, nex
             entityType: 'Contract',
             entityId: contract._id.toString(),
             ip: req.ip,
-            changes: { before: existing.toObject() as any, after: contract.toObject() as any }
+            changes: { before: toAuditChanges(existing), after: toAuditChanges(contract) }
         });
 
         res.status(200).json({
@@ -230,7 +234,7 @@ export const deleteContractHandler = async (req: AuthRequest, res: Response, nex
             entityType: 'Contract',
             entityId: req.params.id,
             ip: req.ip,
-            changes: existing.toObject() as any
+            changes: toAuditChanges(existing)
         });
 
         await deleteContract(req.tenantId!, req.params.id);

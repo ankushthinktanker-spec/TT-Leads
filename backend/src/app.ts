@@ -36,19 +36,53 @@ const app: Application = express();
 app.disable('x-powered-by');
 app.set('trust proxy', 1);
 
+const parseCorsOrigins = (): string[] => {
+    const configured = String(
+        process.env.CORS_ORIGINS ||
+        process.env.FRONTEND_URL ||
+        'http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174'
+    )
+        .split(',')
+        .map((origin) => origin.trim())
+        .filter(Boolean);
+
+    if (process.env.NODE_ENV !== 'development') {
+        return configured;
+    }
+
+    return Array.from(new Set([
+        ...configured,
+        'http://localhost:5173',
+        'http://localhost:5174',
+        'http://127.0.0.1:5173',
+        'http://127.0.0.1:5174',
+        'http://[::1]:5173',
+        'http://[::1]:5174',
+    ]));
+};
+
+const corsOrigins = parseCorsOrigins();
+const isAllowedOrigin = (origin: string): boolean => {
+    if (corsOrigins.includes(origin)) {
+        return true;
+    }
+
+    if (process.env.NODE_ENV !== 'development') {
+        return false;
+    }
+
+    return /^http:\/\/(localhost|127\.0\.0\.1|\[::1\]):\d+$/.test(origin);
+};
+
 // Middleware
 app.use(helmet()); // Security headers
-const corsOrigins = String(process.env.CORS_ORIGINS || process.env.FRONTEND_URL || 'http://localhost:5173,http://localhost:5174')
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean);
 app.use(cors({
     origin: (origin, callback) => {
         if (!origin) {
             callback(null, true);
             return;
         }
-        const allowed = corsOrigins.includes(origin);
+        const allowed = isAllowedOrigin(origin);
         callback(allowed ? null : new Error('CORS not allowed'), allowed);
     },
     credentials: true
@@ -175,6 +209,17 @@ const httpLogger = pinoHttp(httpLoggerOptions);
 app.use(httpLogger);
 
 const authFailureTracker = new Map<string, { count: number; resetAt: number }>();
+
+// Periodic cleanup of expired auth failure tracking entries to prevent memory leaks
+setInterval(() => {
+    const now = Date.now();
+    for (const [key, value] of authFailureTracker) {
+        if (now > value.resetAt) {
+            authFailureTracker.delete(key);
+        }
+    }
+}, 60_000);
+
 app.use((req: Request, res: Response, next) => {
     res.on('finish', () => {
         if (res.statusCode !== 401 && res.statusCode !== 403) return;
@@ -223,27 +268,34 @@ if (slowRequestMs > 0) {
 // Health check route
 app.use('/health', healthRoutes);
 
-// API Routes
-app.use('/api/auth', authLimiter, authRoutes);
-app.use('/api/leads', leadRoutes);
-app.use('/api/companies', companyRoutes);
-app.use('/api/contacts', contactRoutes);
-app.use('/api/activities', activityRoutes);
-app.use('/api/tasks', taskRoutes);
-app.use('/api/deals', dealRoutes);
-app.use('/api/pipelines', pipelineRoutes);
-app.use('/api/contracts', contractRoutes);
-app.use('/api/invoices', invoiceRoutes);
-app.use('/api/subscriptions', subscriptionRoutes);
-app.use('/api/notifications', notificationRoutes);
-app.use('/api/proposals', proposalRoutes);
-app.use('/api/proposal-templates', proposalTemplateRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/settings', settingsRoutes);
-app.use('/api/analytics', analyticsRoutes);
-app.use('/api/reports', reportsRoutes);
-app.use('/api/permissions', permissionRoutes);
-app.use('/api/roles', roleRoutes);
+// ── v1 API Router ────────────────────────────────────────────────────────────
+// All application routes live here. Mounted at /api/v1 (canonical) and /api
+// (backward-compat alias so existing clients continue to work during migration).
+const v1Router = express.Router();
+
+v1Router.use('/auth', authLimiter, authRoutes);
+v1Router.use('/leads', leadRoutes);
+v1Router.use('/companies', companyRoutes);
+v1Router.use('/contacts', contactRoutes);
+v1Router.use('/activities', activityRoutes);
+v1Router.use('/tasks', taskRoutes);
+v1Router.use('/deals', dealRoutes);
+v1Router.use('/pipelines', pipelineRoutes);
+v1Router.use('/contracts', contractRoutes);
+v1Router.use('/invoices', invoiceRoutes);
+v1Router.use('/subscriptions', subscriptionRoutes);
+v1Router.use('/notifications', notificationRoutes);
+v1Router.use('/proposals', proposalRoutes);
+v1Router.use('/proposal-templates', proposalTemplateRoutes);
+v1Router.use('/users', userRoutes);
+v1Router.use('/settings', settingsRoutes);
+v1Router.use('/analytics', analyticsRoutes);
+v1Router.use('/reports', reportsRoutes);
+v1Router.use('/permissions', permissionRoutes);
+v1Router.use('/roles', roleRoutes);
+
+app.use('/api/v1', v1Router);   // canonical versioned path
+app.use('/api', v1Router);      // backward-compat alias (remove after all clients migrate)
 
 // 404 handler
 app.use((_req: Request, res: Response) => {

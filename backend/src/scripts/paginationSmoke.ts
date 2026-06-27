@@ -10,7 +10,7 @@ const run = () => {
     const meta = buildPaginationMeta(2, 25, 260);
     assert.equal(meta.page, 2);
     assert.equal(meta.limit, 25);
-    assert.equal(meta.totalItems, 260);
+    assert.equal(meta.total, 260);
     assert.equal(meta.totalPages, 11);
 
     const emptyMeta = buildPaginationMeta(1, 10, 0);

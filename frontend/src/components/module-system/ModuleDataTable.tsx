@@ -1,4 +1,5 @@
 import { ReactNode } from 'react';
+import ModuleEmptyState from './ModuleEmptyState';
 
 export type SortOrder = 'asc' | 'desc';
 
@@ -24,21 +25,16 @@ interface ModuleDataTableProps<T> {
     emptyIcon?: ReactNode;
     emptyAction?: ReactNode;
     onRetry?: () => void;
-    /** Table title shown in header */
     tableTitle?: string;
     tableBadge?: string;
-    /** Pagination */
     page?: number;
     totalPages?: number;
     totalItems?: number;
     onPageChange?: (page: number) => void;
-    /** Sort */
     sortBy?: string;
     sortOrder?: SortOrder;
     onSortChange?: (sortBy: string, order: SortOrder) => void;
-    /** Row click */
     onRowClick?: (row: T) => void;
-    /** Show checkbox column */
     selectable?: boolean;
     selectedKeys?: Set<string>;
     onSelectChange?: (keys: Set<string>) => void;
@@ -104,6 +100,12 @@ const ModuleDataTable = <T,>({
     };
 
     const showPagination = totalPages > 1 || totalItems > rows.length;
+    const contentColSpan = columns.length + (selectable ? 1 : 0);
+    const mobilePrimaryColumn = columns.find((column) => column.id !== 'actions') ?? columns[0];
+    const mobileActionColumn = columns.find((column) => column.id === 'actions' || column.header === '');
+    const mobileDetailColumns = columns.filter(
+        (column) => column !== mobilePrimaryColumn && column !== mobileActionColumn
+    );
 
     const pageNumbers = (): (number | '...')[] => {
         if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
@@ -117,9 +119,33 @@ const ModuleDataTable = <T,>({
         return pages;
     };
 
+    const renderEmptyOrErrorState = () => {
+        if (error) {
+            return (
+                <ModuleEmptyState
+                    title="Unable to load records"
+                    description={error}
+                    action={onRetry ? (
+                        <button className="mod-btn mod-btn--primary mod-btn--sm" onClick={onRetry}>
+                            Retry
+                        </button>
+                    ) : undefined}
+                />
+            );
+        }
+
+        return (
+            <ModuleEmptyState
+                icon={emptyIcon}
+                title={emptyTitle}
+                description={emptyDescription}
+                action={emptyAction}
+            />
+        );
+    };
+
     return (
         <div className="mod-table-container mod-animate-in" style={{ animationDelay: '180ms' }}>
-            {/* Table header */}
             {(tableTitle || tableBadge) && (
                 <div className="mod-table-container__header">
                     <div className="mod-table-container__title">
@@ -132,8 +158,7 @@ const ModuleDataTable = <T,>({
                 </div>
             )}
 
-            {/* Table */}
-            <div style={{ overflowX: 'visible', minHeight: rows.length > 0 ? '300px' : 'auto', paddingBottom: '20px' }}>
+            <div className="mod-table-scroll" style={{ minHeight: rows.length > 0 ? '300px' : 'auto', paddingBottom: '20px' }}>
                 <table className="mod-table">
                     <thead>
                         <tr>
@@ -162,7 +187,7 @@ const ModuleDataTable = <T,>({
                                             {col.header}
                                             {sortBy === col.id && (
                                                 <span style={{ color: 'var(--mod-primary)', fontSize: 11 }}>
-                                                    {sortOrder === 'asc' ? '↑' : '↓'}
+                                                    {sortOrder === 'asc' ? '^' : 'v'}
                                                 </span>
                                             )}
                                         </button>
@@ -191,26 +216,14 @@ const ModuleDataTable = <T,>({
                             ))
                         ) : error ? (
                             <tr>
-                                <td colSpan={columns.length + (selectable ? 1 : 0)} style={{ textAlign: 'center', padding: '48px 24px' }}>
-                                    <div className="mod-empty-state" style={{ padding: '16px 0' }}>
-                                        <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--mod-danger)', marginBottom: 12 }}>{error}</p>
-                                        {onRetry && (
-                                            <button className="mod-btn mod-btn--primary mod-btn--sm" onClick={onRetry}>
-                                                Retry
-                                            </button>
-                                        )}
-                                    </div>
+                                <td colSpan={contentColSpan} style={{ textAlign: 'center', padding: '48px 24px' }}>
+                                    {renderEmptyOrErrorState()}
                                 </td>
                             </tr>
                         ) : rows.length === 0 ? (
                             <tr>
-                                <td colSpan={columns.length + (selectable ? 1 : 0)}>
-                                    <div className="mod-empty-state">
-                                        {emptyIcon && <div className="mod-empty-state__icon">{emptyIcon}</div>}
-                                        <div className="mod-empty-state__title">{emptyTitle}</div>
-                                        <div className="mod-empty-state__description">{emptyDescription}</div>
-                                        {emptyAction && <div className="mod-empty-state__action">{emptyAction}</div>}
-                                    </div>
+                                <td colSpan={contentColSpan}>
+                                    {renderEmptyOrErrorState()}
                                 </td>
                             </tr>
                         ) : (
@@ -248,7 +261,85 @@ const ModuleDataTable = <T,>({
                 </table>
             </div>
 
-            {/* Pagination */}
+            <div className="mod-table-cards">
+                {loading ? (
+                    Array.from({ length: 4 }).map((_, idx) => (
+                        <div key={`card-skeleton-${idx}`} className="mod-table-card mod-table-card--skeleton">
+                            <div className="mod-table-card__header">
+                                <div className="mod-table__skeleton" style={{ width: '52%', height: 18 }} />
+                                <div className="mod-table__skeleton" style={{ width: 72, height: 28 }} />
+                            </div>
+                            <div className="mod-table-card__grid">
+                                {Array.from({ length: Math.min(3, Math.max(1, mobileDetailColumns.length || 2)) }).map((__, detailIdx) => (
+                                    <div key={`card-skeleton-detail-${detailIdx}`} className="mod-table-card__field">
+                                        <div className="mod-table__skeleton" style={{ width: '38%', height: 10 }} />
+                                        <div className="mod-table__skeleton" style={{ width: `${58 + Math.random() * 22}%`, height: 14 }} />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ))
+                ) : error || rows.length === 0 ? (
+                    <div className="mod-table-cards__state">
+                        {renderEmptyOrErrorState()}
+                    </div>
+                ) : (
+                    rows.map((row) => {
+                        const key = rowKey(row);
+                        return (
+                            <article
+                                key={`card-${key}`}
+                                className={`mod-table-card${onRowClick ? ' mod-table-card--interactive' : ''}`}
+                                onClick={() => onRowClick?.(row)}
+                            >
+                                <div className="mod-table-card__header">
+                                    <div className="mod-table-card__title-group">
+                                        {selectable && (
+                                            <div className="mod-table-card__check" onClick={(e) => e.stopPropagation()}>
+                                                <input
+                                                    type="checkbox"
+                                                    className="mod-table__checkbox"
+                                                    checked={selectedKeys?.has(key) ?? false}
+                                                    onChange={() => toggleSelect(key)}
+                                                />
+                                            </div>
+                                        )}
+                                        <div className="mod-table-card__title-content">
+                                            <div className="mod-table-card__label">
+                                                {mobilePrimaryColumn?.header || 'Record'}
+                                            </div>
+                                            <div className="mod-table-card__title">
+                                                {mobilePrimaryColumn ? renderCell(row, mobilePrimaryColumn) : '-'}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {mobileActionColumn && (
+                                        <div className="mod-table-card__actions" onClick={(e) => e.stopPropagation()}>
+                                            {renderCell(row, mobileActionColumn)}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {mobileDetailColumns.length > 0 && (
+                                    <div className="mod-table-card__grid">
+                                        {mobileDetailColumns.map((column) => (
+                                            <div key={`${key}-${column.id}`} className="mod-table-card__field">
+                                                <div className="mod-table-card__label">
+                                                    {column.header || column.id}
+                                                </div>
+                                                <div className={`mod-table-card__value${column.align === 'right' ? ' mod-table-card__value--right' : ''}`}>
+                                                    {renderCell(row, column)}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </article>
+                        );
+                    })
+                )}
+            </div>
+
             {showPagination && !loading && (
                 <div className="mod-pagination">
                     <div className="mod-pagination__info">
@@ -264,11 +355,11 @@ const ModuleDataTable = <T,>({
                             disabled={page <= 1}
                             onClick={() => onPageChange?.(page - 1)}
                         >
-                            ← Prev
+                            {'<'} Prev
                         </button>
                         {pageNumbers().map((p, i) =>
                             p === '...' ? (
-                                <span key={`ellipsis-${i}`} style={{ padding: '0 4px', color: 'var(--mod-text-subtle)' }}>…</span>
+                                <span key={`ellipsis-${i}`} style={{ padding: '0 4px', color: 'var(--mod-text-subtle)' }}>...</span>
                             ) : (
                                 <button
                                     key={p}
@@ -284,7 +375,7 @@ const ModuleDataTable = <T,>({
                             disabled={page >= totalPages}
                             onClick={() => onPageChange?.(page + 1)}
                         >
-                            Next →
+                            Next {'>'}
                         </button>
                     </div>
                 </div>

@@ -3,11 +3,15 @@ import Contact from '../models/contact.model';
 import Company from '../models/company.model';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth.middleware';
+import { Roles } from '../constants/roles';
 import { createContactSchema, updateContactSchema } from '../validators/contact.validator';
 import mongoose from 'mongoose';
 import { getPaginationParams, buildPaginationMeta } from '../utils/pagination';
 import { getSearchTerm, applySearchFilter } from '../utils/queryFilters';
 import { writeAuditLog } from '../services/audit.service';
+
+const toAuditChanges = (value: { toObject: () => unknown }): Record<string, unknown> =>
+    value.toObject() as unknown as Record<string, unknown>;
 
 // @desc    Get all contacts
 // @route   GET /api/contacts
@@ -28,7 +32,7 @@ export const getContacts = async (
         // Build filter - Critical Tenant Isolation
         const filter: Record<string, unknown> = { tenantId: req.tenantId! };
 
-        if (req.user!.role !== 'Admin' && req.user!.role !== 'Manager') {
+        if (req.user!.role !== Roles.ADMIN && req.user!.role !== Roles.MANAGER) {
             filter.createdBy = req.user!._id;
         }
 
@@ -53,14 +57,15 @@ export const getContacts = async (
             .populate('createdBy', 'firstName lastName email')
             .sort(sort)
             .skip(skip)
-            .limit(limit);
+            .limit(limit)
+            .lean();
 
         const total = await Contact.countDocuments(filter);
 
         res.status(200).json({
             success: true,
             data: {
-                items: contacts,
+                data: contacts,
                 meta: buildPaginationMeta(page, limit, total)
             }
         });
@@ -112,7 +117,7 @@ export const createContact = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        const { error, value } = createContactSchema.validate(req.body);
+        const { error, value } = createContactSchema.validate(req.body, { stripUnknown: true });
         if (error) {
             throw new AppError(error.details[0].message, 400);
         }
@@ -136,7 +141,7 @@ export const createContact = async (
             entityType: 'Contact',
             entityId: contact._id.toString(),
             ip: req.ip,
-            changes: contact.toObject() as any
+            changes: toAuditChanges(contact)
         });
 
         res.status(201).json({
@@ -162,7 +167,7 @@ export const updateContact = async (
             throw new AppError('Invalid contact identifier', 400);
         }
 
-        const { error, value } = updateContactSchema.validate(req.body);
+        const { error, value } = updateContactSchema.validate(req.body, { stripUnknown: true });
         if (error) {
             throw new AppError(error.details[0].message, 400);
         }
@@ -172,11 +177,11 @@ export const updateContact = async (
             throw new AppError('Contact not found or unauthorized access', 404);
         }
 
-        const beforeUpdate = contact.toObject();
+        const beforeUpdate = toAuditChanges(contact);
 
         if (
-            req.user!.role !== 'Admin' &&
-            req.user!.role !== 'Manager' &&
+            req.user!.role !== Roles.ADMIN &&
+            req.user!.role !== Roles.MANAGER &&
             contact.createdBy.toString() !== req.user!._id.toString()
         ) {
             throw new AppError('Not authorized to update this contact', 403);
@@ -213,7 +218,7 @@ export const updateContact = async (
             entityType: 'Contact',
             entityId: updatedContact._id.toString(),
             ip: req.ip,
-            changes: { before: beforeUpdate as any, after: updatedContact.toObject() as any }
+            changes: { before: beforeUpdate, after: toAuditChanges(updatedContact) }
         });
 
         res.status(200).json({
@@ -245,8 +250,8 @@ export const deleteContact = async (
         }
 
         if (
-            req.user!.role !== 'Admin' &&
-            req.user!.role !== 'Manager' &&
+            req.user!.role !== Roles.ADMIN &&
+            req.user!.role !== Roles.MANAGER &&
             contact.createdBy.toString() !== req.user!._id.toString()
         ) {
             throw new AppError('Not authorized to delete this contact', 403);
@@ -260,7 +265,7 @@ export const deleteContact = async (
             entityType: 'Contact',
             entityId: contact._id.toString(),
             ip: req.ip,
-            changes: contact.toObject() as any
+            changes: toAuditChanges(contact)
         });
 
         await contact.deleteOne();

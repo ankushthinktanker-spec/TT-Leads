@@ -10,7 +10,7 @@ import {
 
 // Create axios instance
 const api = axios.create({
-    baseURL: '/api', // Use Vite proxy
+    baseURL: '/api/v1', // Use Vite proxy — versioned API
     headers: {
         'Content-Type': 'application/json',
     },
@@ -35,7 +35,7 @@ const refreshAccessToken = async (): Promise<string | null> => {
     const refreshToken = getRefreshToken();
     if (!refreshToken) return null;
 
-    refreshPromise = axios.post('/api/auth/refresh-token', { refreshToken }, { headers: { 'Content-Type': 'application/json' } })
+    refreshPromise = axios.post('/api/v1/auth/refresh-token', { refreshToken }, { headers: { 'Content-Type': 'application/json' } })
         .then((response) => {
             const token = response.data?.data?.token;
             const newRefreshToken = response.data?.data?.refreshToken;
@@ -57,15 +57,16 @@ const refreshAccessToken = async (): Promise<string | null> => {
     return refreshPromise;
 };
 
+// Public auth routes that don't need a Bearer token
+const PUBLIC_AUTH_ROUTES = ['/auth/login', '/auth/refresh-token'];
+
+const isPublicAuthRoute = (url?: string): boolean =>
+    typeof url === 'string' && PUBLIC_AUTH_ROUTES.some(r => url.startsWith(r));
+
 // Request interceptor for adding the auth token
 api.interceptors.request.use(
     async (config: AuthRequestConfig) => {
-        if (config._skipAuth) {
-            return config;
-        }
-
-        const isAuthRoute = typeof config.url === 'string' && config.url.startsWith('/auth/');
-        if (isAuthRoute) {
+        if (config._skipAuth || isPublicAuthRoute(config.url)) {
             return config;
         }
 
@@ -91,9 +92,8 @@ api.interceptors.response.use(
     async (error: AxiosError) => {
         const originalRequest = (error.config || {}) as AuthRequestConfig;
         if (error.response?.status === 401 && !originalRequest._retry) {
-            const isAuthRoute = typeof originalRequest.url === 'string' && originalRequest.url.startsWith('/auth/');
-            if (isAuthRoute) {
-                clearAuthStorage();
+            // Only clear auth storage for public auth routes (login failure, etc.)
+            if (isPublicAuthRoute(originalRequest.url)) {
                 return Promise.reject(error);
             }
 

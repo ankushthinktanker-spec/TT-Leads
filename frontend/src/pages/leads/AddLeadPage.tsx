@@ -40,7 +40,7 @@ export const AddLeadPage = () => {
                                 Back to leads
                             </button>
                             <div className="mb-3 flex items-center gap-3">
-                                <span className="rounded-full bg-white/90 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-brand-700 shadow-sm">
+                                <span className="rounded-full bg-[#fffdf9] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-brand-700 shadow-sm">
                                     New lead
                                 </span>
                                 <span className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
@@ -54,7 +54,7 @@ export const AddLeadPage = () => {
                                 Keep lead capture clean, assign ownership early, and set the next follow-up before the record enters the pipeline.
                             </p>
                         </div>
-                        <div className="flex items-center gap-3 self-start rounded-[1.75rem] border border-slate-200 bg-white px-5 py-4 shadow-sm">
+                        <div className="flex items-center gap-3 self-start rounded-[1.75rem] border border-[var(--mod-border)] bg-[#fffaf4] px-5 py-4 shadow-[0_10px_30px_rgba(120,74,24,0.08)]">
                             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-50 text-brand-600">
                                 <UserPlus size={28} strokeWidth={1.8} />
                             </div>
@@ -73,9 +73,10 @@ export const AddLeadPage = () => {
 
             <div className="relative tt-animate-fade-up" style={{ animationDelay: '100ms' }}>
                 <div className="relative workspace-sheet p-8 md:p-10">
-                    <LeadForm onSubmit={handleSubmit} error={formError} />
+                    <LeadForm onSubmit={handleSubmit} error={formError} onCancel={() => navigate(ROUTES.leads)} />
                 </div>
             </div>
         </div>
     );
 };
+

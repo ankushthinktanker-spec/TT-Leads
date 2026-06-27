@@ -1,6 +1,7 @@
-import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
+import { createAsyncThunk } from '@reduxjs/toolkit';
 import api from '../../api/axios';
 import { getErrorMessage } from '../../utils/error';
+import { createCrudSlice, CrudState } from '../createCrudSlice';
 
 export type SubscriptionStatus = 'Active' | 'Paused' | 'Cancelled' | 'Expired';
 export type SubscriptionType = 'Software' | 'Domain' | 'Hosting' | 'Email' | 'API' | 'License' | 'Other';
@@ -27,58 +28,8 @@ export interface Subscription {
     updatedAt: string;
 }
 
-interface SubscriptionState {
-    subscriptions: Subscription[];
-    loading: boolean;
-    error: string | null;
-    pagination: {
-        page: number;
-        limit: number;
-        totalItems: number;
-        totalPages: number;
-    };
-}
-
-const initialState: SubscriptionState = {
-    subscriptions: [],
-    loading: false,
-    error: null,
-    pagination: {
-        page: 1,
-        limit: 10,
-        totalItems: 0,
-        totalPages: 0
-    }
-};
-
-export const fetchSubscriptions = createAsyncThunk(
-    'subscriptions/fetchSubscriptions',
-    async (params: {
-        q?: string;
-        page?: number;
-        limit?: number;
-        sortBy?: string;
-        sortOrder?: 'asc' | 'desc';
-        dateFrom?: string;
-        dateTo?: string;
-        ownerId?: string;
-        status?: string;
-        tags?: string;
-        rating?: string;
-        companyId?: string;
-        type?: string;
-    } = {}, { rejectWithValue }) => {
-        try {
-            const response = await api.get('/subscriptions', { params });
-            return response.data;
-        } catch (error: unknown) {
-            return rejectWithValue(getErrorMessage(error, 'Failed to fetch subscriptions'));
-        }
-    }
-);
-
 export const fetchUpcomingSubscriptions = createAsyncThunk(
-    'subscriptions/fetchUpcomingSubscriptions',
+    'subscriptions/fetchUpcoming',
     async (params: { days?: number; limit?: number } = {}, { rejectWithValue }) => {
         try {
             const response = await api.get('/subscriptions/upcoming', { params });
@@ -89,32 +40,8 @@ export const fetchUpcomingSubscriptions = createAsyncThunk(
     }
 );
 
-export const createSubscription = createAsyncThunk(
-    'subscriptions/createSubscription',
-    async (payload: Partial<Subscription>, { rejectWithValue }) => {
-        try {
-            const response = await api.post('/subscriptions', payload);
-            return response.data;
-        } catch (error: unknown) {
-            return rejectWithValue(getErrorMessage(error, 'Failed to create subscription'));
-        }
-    }
-);
-
-export const updateSubscription = createAsyncThunk(
-    'subscriptions/updateSubscription',
-    async ({ id, data }: { id: string; data: Partial<Subscription> }, { rejectWithValue }) => {
-        try {
-            const response = await api.put(`/subscriptions/${id}`, data);
-            return response.data;
-        } catch (error: unknown) {
-            return rejectWithValue(getErrorMessage(error, 'Failed to update subscription'));
-        }
-    }
-);
-
 export const updateSubscriptionStatus = createAsyncThunk(
-    'subscriptions/updateSubscriptionStatus',
+    'subscriptions/updateStatus',
     async ({ id, status }: { id: string; status: SubscriptionStatus }, { rejectWithValue }) => {
         try {
             const response = await api.patch(`/subscriptions/${id}/status`, { status });
@@ -125,66 +52,26 @@ export const updateSubscriptionStatus = createAsyncThunk(
     }
 );
 
-export const deleteSubscription = createAsyncThunk(
-    'subscriptions/deleteSubscription',
-    async (id: string, { rejectWithValue }) => {
-        try {
-            await api.delete(`/subscriptions/${id}`);
-            return id;
-        } catch (error: unknown) {
-            return rejectWithValue(getErrorMessage(error, 'Failed to delete subscription'));
-        }
-    }
-);
+const patchSubscriptionInState = (state: CrudState<Subscription>, subscription: Subscription) => {
+    const index = state.items.findIndex((item) => item._id === subscription._id);
+    if (index !== -1) state.items[index] = subscription;
+    if (state.currentItem?._id === subscription._id) state.currentItem = subscription;
+};
 
-const subscriptionSlice = createSlice({
+const { reducer, actions } = createCrudSlice<Subscription>({
     name: 'subscriptions',
-    initialState,
-    reducers: {},
+    endpoint: '/subscriptions',
+    entityKey: 'subscription',
     extraReducers: (builder) => {
-        builder
-            .addCase(fetchSubscriptions.pending, (state) => {
-                state.loading = true;
-                state.error = null;
-            })
-            .addCase(fetchSubscriptions.fulfilled, (state, action) => {
-                state.loading = false;
-                const data = action.payload?.data || {};
-                const meta = data.meta || action.payload?.pagination || {};
-                state.subscriptions = data.items || data.subscriptions || [];
-                state.pagination = {
-                    page: meta.page || 1,
-                    limit: meta.limit || 10,
-                    totalItems: meta.totalItems || meta.total || 0,
-                    totalPages: meta.totalPages || meta.pages || 0
-                };
-            })
-            .addCase(fetchSubscriptions.rejected, (state, action) => {
-                state.loading = false;
-                state.error = action.payload as string;
-            })
-            .addCase(createSubscription.fulfilled, (state, action) => {
-                const subscription = action.payload.data.subscription;
-                state.subscriptions.unshift(subscription);
-            })
-            .addCase(updateSubscription.fulfilled, (state, action) => {
-                const subscription = action.payload.data.subscription;
-                const index = state.subscriptions.findIndex((item) => item._id === subscription._id);
-                if (index !== -1) {
-                    state.subscriptions[index] = subscription;
-                }
-            })
-            .addCase(updateSubscriptionStatus.fulfilled, (state, action) => {
-                const subscription = action.payload.data.subscription;
-                const index = state.subscriptions.findIndex((item) => item._id === subscription._id);
-                if (index !== -1) {
-                    state.subscriptions[index] = subscription;
-                }
-            })
-            .addCase(deleteSubscription.fulfilled, (state, action) => {
-                state.subscriptions = state.subscriptions.filter((item) => item._id !== action.payload);
-            });
-    }
+        builder.addCase(updateSubscriptionStatus.fulfilled, (state, action) => {
+            patchSubscriptionInState(state, action.payload.data.subscription);
+        });
+    },
 });
 
-export default subscriptionSlice.reducer;
+export const fetchSubscriptions = actions.fetchList;
+export const createSubscription = actions.create;
+export const updateSubscription = actions.update;
+export const deleteSubscription = actions.remove;
+
+export default reducer;

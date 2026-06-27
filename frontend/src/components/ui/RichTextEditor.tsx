@@ -1,21 +1,21 @@
-import { useEditor, EditorContent } from '@tiptap/react';
+﻿import { useEditor, EditorContent, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Table } from '@tiptap/extension-table';
 import TableRow from '@tiptap/extension-table-row';
 import TableCell from '@tiptap/extension-table-cell';
 import TableHeader from '@tiptap/extension-table-header';
 import Link from '@tiptap/extension-link';
-import { 
-    Bold, 
-    Italic, 
-    List, 
-    ListOrdered, 
-    Heading2, 
-    Table as TableIcon, 
-    Undo, 
+import {
+    Bold,
+    Italic,
+    List,
+    ListOrdered,
+    Heading2,
+    Table as TableIcon,
+    Undo,
     Redo,
     Trash2,
-    Plus
+    Plus,
 } from 'lucide-react';
 import { useEffect } from 'react';
 
@@ -25,29 +25,27 @@ interface RichTextEditorProps {
     placeholder?: string;
 }
 
-const MenuBar = ({ editor }: { editor: any }) => {
-    if (!editor) {
-        return null;
-    }
+const MenuBar = ({ editor }: { editor: Editor | null }) => {
+    if (!editor) return null;
 
     const addTable = () => {
         editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
     };
 
     return (
-        <div className="flex flex-wrap items-center gap-1 border-b border-slate-200 bg-slate-50 p-2 rounded-t-xl transition-colors">
+        <div className="flex flex-wrap items-center gap-1 rounded-t-xl border-b border-slate-200 bg-[#faf2e7] p-2 transition-colors">
             <button
                 onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-                className={`p-2 rounded-lg hover:bg-brand-50 transition-all ${editor.isActive('heading', { level: 2 }) ? 'bg-brand-100 text-brand-600' : 'text-slate-600'}`}
-                title="Heading 2 (Section Title Style)"
+                className={`rounded-lg p-2 transition-all hover:bg-brand-50 ${editor.isActive('heading', { level: 2 }) ? 'bg-brand-100 text-brand-700' : 'text-slate-600'}`}
+                title="Heading 2"
                 type="button"
             >
                 <Heading2 size={18} />
             </button>
-            <div className="w-px h-6 bg-slate-200 mx-1" />
+            <div className="mx-1 h-6 w-px bg-slate-200" />
             <button
                 onClick={() => editor.chain().focus().toggleBold().run()}
-                className={`p-2 rounded-lg hover:bg-brand-50 transition-all ${editor.isActive('bold') ? 'bg-brand-100 text-brand-600' : 'text-slate-600'}`}
+                className={`rounded-lg p-2 transition-all hover:bg-brand-50 ${editor.isActive('bold') ? 'bg-brand-100 text-brand-700' : 'text-slate-600'}`}
                 title="Bold"
                 type="button"
             >
@@ -55,16 +53,16 @@ const MenuBar = ({ editor }: { editor: any }) => {
             </button>
             <button
                 onClick={() => editor.chain().focus().toggleItalic().run()}
-                className={`p-2 rounded-lg hover:bg-brand-50 transition-all ${editor.isActive('italic') ? 'bg-brand-100 text-brand-600' : 'text-slate-600'}`}
+                className={`rounded-lg p-2 transition-all hover:bg-brand-50 ${editor.isActive('italic') ? 'bg-brand-100 text-brand-700' : 'text-slate-600'}`}
                 title="Italic"
                 type="button"
             >
                 <Italic size={18} />
             </button>
-            <div className="w-px h-6 bg-slate-200 mx-1" />
+            <div className="mx-1 h-6 w-px bg-slate-200" />
             <button
                 onClick={() => editor.chain().focus().toggleBulletList().run()}
-                className={`p-2 rounded-lg hover:bg-brand-50 transition-all ${editor.isActive('bulletList') ? 'bg-brand-100 text-brand-600' : 'text-slate-600'}`}
+                className={`rounded-lg p-2 transition-all hover:bg-brand-50 ${editor.isActive('bulletList') ? 'bg-brand-100 text-brand-700' : 'text-slate-600'}`}
                 title="Bullet List"
                 type="button"
             >
@@ -72,16 +70,16 @@ const MenuBar = ({ editor }: { editor: any }) => {
             </button>
             <button
                 onClick={() => editor.chain().focus().toggleOrderedList().run()}
-                className={`p-2 rounded-lg hover:bg-brand-50 transition-all ${editor.isActive('orderedList') ? 'bg-brand-100 text-brand-600' : 'text-slate-600'}`}
+                className={`rounded-lg p-2 transition-all hover:bg-brand-50 ${editor.isActive('orderedList') ? 'bg-brand-100 text-brand-700' : 'text-slate-600'}`}
                 title="Numbered List"
                 type="button"
             >
                 <ListOrdered size={18} />
             </button>
-            <div className="w-px h-6 bg-slate-200 mx-1" />
+            <div className="mx-1 h-6 w-px bg-slate-200" />
             <button
                 onClick={addTable}
-                className={`p-2 rounded-lg hover:bg-brand-50 transition-all ${editor.isActive('table') ? 'bg-brand-100 text-brand-600' : 'text-slate-600'}`}
+                className={`rounded-lg p-2 transition-all hover:bg-brand-50 ${editor.isActive('table') ? 'bg-brand-100 text-brand-700' : 'text-slate-600'}`}
                 title="Insert Table"
                 type="button"
             >
@@ -91,7 +89,7 @@ const MenuBar = ({ editor }: { editor: any }) => {
                 <>
                     <button
                         onClick={() => editor.chain().focus().deleteTable().run()}
-                        className="p-2 rounded-lg hover:bg-red-50 text-red-600 transition-all"
+                        className="rounded-lg p-2 text-red-600 transition-all hover:bg-red-50"
                         title="Delete Table"
                         type="button"
                     >
@@ -99,7 +97,7 @@ const MenuBar = ({ editor }: { editor: any }) => {
                     </button>
                     <button
                         onClick={() => editor.chain().focus().addColumnAfter().run()}
-                        className="p-2 rounded-lg hover:bg-brand-50 text-brand-600 transition-all"
+                        className="rounded-lg p-2 text-brand-700 transition-all hover:bg-brand-50"
                         title="Add Column"
                         type="button"
                     >
@@ -107,7 +105,7 @@ const MenuBar = ({ editor }: { editor: any }) => {
                     </button>
                     <button
                         onClick={() => editor.chain().focus().addRowAfter().run()}
-                        className="p-2 rounded-lg hover:bg-brand-50 text-brand-600 transition-all"
+                        className="rounded-lg p-2 text-brand-700 transition-all hover:bg-brand-50"
                         title="Add Row"
                         type="button"
                     >
@@ -118,7 +116,7 @@ const MenuBar = ({ editor }: { editor: any }) => {
             <div className="flex-grow" />
             <button
                 onClick={() => editor.chain().focus().undo().run()}
-                className="p-2 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-900 transition-all"
+                className="rounded-lg p-2 text-slate-400 transition-all hover:bg-[#f3e7d8] hover:text-slate-900"
                 title="Undo"
                 type="button"
             >
@@ -126,7 +124,7 @@ const MenuBar = ({ editor }: { editor: any }) => {
             </button>
             <button
                 onClick={() => editor.chain().focus().redo().run()}
-                className="p-2 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-900 transition-all"
+                className="rounded-lg p-2 text-slate-400 transition-all hover:bg-[#f3e7d8] hover:text-slate-900"
                 title="Redo"
                 type="button"
             >
@@ -154,24 +152,22 @@ const RichTextEditor = ({ content, onChange, placeholder }: RichTextEditorProps)
                 openOnClick: false,
             }),
         ],
-        content: content,
-        onUpdate: ({ editor }) => {
-            onChange(editor.getHTML());
+        content,
+        onUpdate: ({ editor: nextEditor }) => {
+            onChange(nextEditor.getHTML());
         },
         editorProps: {
             attributes: {
-                class: 'prose prose-slate prose-brand max-w-none focus:outline-none min-h-[300px] p-8 text-slate-700 font-sans leading-relaxed transition-all selection:bg-brand-100 selection:text-brand-900',
+                class: 'prose prose-slate max-w-none min-h-[300px] p-8 font-sans leading-relaxed text-slate-700 outline-none transition-all selection:bg-brand-100 selection:text-brand-950',
             },
-            handlePaste: (_view, _event) => {
-                // Improved paste handling is built into Tiptap, 
-                // but we can add logic here if custom sanitization is needed.
-                return false; 
-            },
-            ...(placeholder ? {
-                transformPastedHTML(html) {
-                    return html;
-                },
-            } : {})
+            handlePaste: () => false,
+            ...(placeholder
+                ? {
+                    transformPastedHTML(html: string) {
+                        return html;
+                    },
+                }
+                : {}),
         },
     });
 
@@ -182,9 +178,9 @@ const RichTextEditor = ({ content, onChange, placeholder }: RichTextEditorProps)
     }, [content, editor]);
 
     return (
-        <div className="w-full rounded-2xl border border-slate-200 bg-white transition-all hover:border-brand-300 focus-within:ring-4 focus-within:ring-brand-500/10 overflow-hidden shadow-sm">
+        <div className="w-full overflow-hidden rounded-2xl border border-slate-200 bg-[#fffaf4] shadow-[0_8px_24px_rgba(120,74,24,0.05)] transition-all hover:border-brand-300 focus-within:ring-4 focus-within:ring-brand-500/10">
             <MenuBar editor={editor} />
-            <div className="bg-white">
+            <div className="bg-[#fffdf9]">
                 <EditorContent editor={editor} placeholder={placeholder} />
             </div>
             <style>
@@ -195,11 +191,11 @@ const RichTextEditor = ({ content, onChange, placeholder }: RichTextEditorProps)
                     width: 100%;
                     margin: 2rem 0;
                     overflow: hidden;
-                    border: 2px solid #f1f5f9;
+                    border: 2px solid #eadfce;
                     border-radius: 8px;
                 }
                 .ProseMirror td, .ProseMirror th {
-                    border: 1px solid #f1f5f9;
+                    border: 1px solid #eadfce;
                     box-sizing: border-box;
                     min-width: 1em;
                     padding: 0.75rem 1rem;
@@ -207,7 +203,7 @@ const RichTextEditor = ({ content, onChange, placeholder }: RichTextEditorProps)
                     vertical-align: top;
                 }
                 .ProseMirror th {
-                    background-color: #f8fafc;
+                    background-color: #faf2e7;
                     font-weight: 800;
                     text-align: left;
                     color: #475569;
@@ -216,7 +212,7 @@ const RichTextEditor = ({ content, onChange, placeholder }: RichTextEditorProps)
                     letter-spacing: 0.05em;
                 }
                 .ProseMirror .selectedCell:after {
-                    background: rgba(139, 92, 246, 0.1);
+                    background: rgba(255, 188, 0, 0.15);
                     content: "";
                     left: 0; right: 0; top: 0; bottom: 0;
                     pointer-events: none;
@@ -224,7 +220,7 @@ const RichTextEditor = ({ content, onChange, placeholder }: RichTextEditorProps)
                     z-index: 2;
                 }
                 .ProseMirror .column-resize-handle {
-                    background-color: #8b5cf6;
+                    background-color: #ffbc00;
                     bottom: -2px;
                     position: absolute;
                     right: -2px;
@@ -272,7 +268,7 @@ const RichTextEditor = ({ content, onChange, placeholder }: RichTextEditorProps)
                     top: 0.6rem;
                     width: 0.375rem;
                     height: 0.375rem;
-                    background-color: #8b5cf6;
+                    background-color: #ffbc00;
                     border-radius: 9999px;
                 }
                 .ProseMirror ol {

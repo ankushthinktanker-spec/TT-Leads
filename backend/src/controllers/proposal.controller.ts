@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import Proposal from '../models/proposal.model';
 import ProposalSection from '../models/proposal-section.model';
+import { Roles } from '../constants/roles';
 import ProposalTemplate from '../models/proposal-template.model';
 import { proposalRepository } from '../repositories/proposal.repository';
 import { leadRepository } from '../repositories/lead.repository';
@@ -165,8 +166,8 @@ const canManageProposal = (
     user: NonNullable<AuthRequest['user']>
 ) => {
     return (
-        user.role === 'Admin' ||
-        user.role === 'Manager' ||
+        user.role === Roles.ADMIN ||
+        user.role === Roles.MANAGER ||
         proposal.createdBy?.toString() === user._id.toString()
     );
 };
@@ -191,7 +192,7 @@ export const getProposals = async (
         // Build filter
         const filter: Record<string, unknown> = { tenantId: req.tenantId! };
 
-        if (req.user!.role !== 'Admin' && req.user!.role !== 'Manager') {
+        if (req.user!.role !== Roles.ADMIN && req.user!.role !== Roles.MANAGER) {
             filter.createdBy = req.user!._id;
         }
 
@@ -225,7 +226,7 @@ export const getProposals = async (
         res.status(200).json({
             success: true,
             data: {
-                items: proposals,
+                data: proposals,
                 meta: buildPaginationMeta(page, limit, total)
             }
         });
@@ -284,7 +285,7 @@ export const createProposal = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        const { error, value } = createProposalSchema.validate(req.body);
+        const { error, value } = createProposalSchema.validate(req.body, { stripUnknown: true });
         if (error) {
             throw new AppError(error.details[0].message, 400);
         }
@@ -356,7 +357,7 @@ export const createProposalFromTemplate = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        const { error, value } = createProposalSchema.validate(req.body);
+        const { error, value } = createProposalSchema.validate(req.body, { stripUnknown: true });
         if (error) {
             throw new AppError(error.details[0].message, 400);
         }
@@ -451,7 +452,7 @@ export const updateProposal = async (
             throw new AppError('Invalid proposal identifier', 400);
         }
 
-        const { error, value } = updateProposalSchema.validate(req.body);
+        const { error, value } = updateProposalSchema.validate(req.body, { stripUnknown: true });
         if (error) {
             throw new AppError(error.details[0].message, 400);
         }
@@ -590,7 +591,7 @@ export const addSection = async (
             throw new AppError('Invalid proposal identifier', 400);
         }
 
-        const { error, value } = createProposalSectionSchema.validate(req.body);
+        const { error, value } = createProposalSectionSchema.validate(req.body, { stripUnknown: true });
         if (error) {
             throw new AppError(error.details[0].message, 400);
         }
@@ -647,7 +648,7 @@ export const updateSection = async (
             throw new AppError('Invalid identifier', 400);
         }
 
-        const { error, value } = updateProposalSectionSchema.validate(req.body);
+        const { error, value } = updateProposalSectionSchema.validate(req.body, { stripUnknown: true });
         if (error) {
             throw new AppError(error.details[0].message, 400);
         }
@@ -753,7 +754,7 @@ export const reorderSections = async (
             throw new AppError('Invalid proposal identifier', 400);
         }
 
-        const { error, value } = reorderProposalSectionsSchema.validate(req.body);
+        const { error, value } = reorderProposalSectionsSchema.validate(req.body, { stripUnknown: true });
         if (error) {
             throw new AppError(error.details[0].message, 400);
         }
@@ -1042,7 +1043,7 @@ export const sendProposal = async (
             throw new AppError('Invalid proposal identifier', 400);
         }
 
-        const { error, value } = sendProposalSchema.validate(req.body || {});
+        const { error, value } = sendProposalSchema.validate(req.body || {}, { stripUnknown: true });
         if (error) {
             throw new AppError(error.details[0].message, 400);
         }

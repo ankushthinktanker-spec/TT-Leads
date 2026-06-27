@@ -1,53 +1,34 @@
-import { useEffect, useMemo } from 'react';
-import { Download, Filter, Plus, Target, Users, Zap, BriefcaseBusiness, AlertCircle } from 'lucide-react';
-import { parseISO, isPast, format } from 'date-fns';
+import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Plus, Target, Users, Zap, BriefcaseBusiness, AlertCircle } from 'lucide-react';
+import { parseISO, format } from 'date-fns';
 import { useAppDispatch, useAppSelector } from '../hooks/redux';
 import { fetchDashboardAnalytics } from '../store/slices/analyticsSlice';
-import type { DashboardActivity, DashboardData, DashboardSourceRow, PipelineRow } from '../types/dashboard';
+import type { DashboardData, PipelineRow } from '../types/dashboard';
+import InlineAlert from '../components/ui/InlineAlert';
 import {
     ModulePageShell,
     ModulePageHeader,
     ModuleSummaryCards,
     ModuleDataTable,
-    ModuleBadge,
     type ModuleColumnDef,
     type SummaryCardItem,
 } from '../components/module-system';
 
-const fallbackPipeline: PipelineRow[] = [
-    { stage: 'New Leads', count: 46 },
-    { stage: 'Qualified', count: 31 },
-    { stage: 'Proposal Sent', count: 18 },
-    { stage: 'Negotiation', count: 11 },
-    { stage: 'Won', count: 7 }
-];
-
-const fallbackSources: DashboardSourceRow[] = [
-    { source: 'Website', leads: 42, won: 10, conversionRate: 23.8 },
-    { source: 'Referral', leads: 28, won: 12, conversionRate: 42.9 },
-    { source: 'LinkedIn', leads: 33, won: 8, conversionRate: 24.2 },
-    { source: 'Campaigns', leads: 19, won: 4, conversionRate: 21.1 }
-];
-
-const fallbackActivity: DashboardActivity[] = [
-    { _id: '1', subject: 'Proposal sent to Northstar Labs', type: 'proposal', activityDate: '2026-03-26T08:15:00.000Z' },
-    { _id: '2', subject: 'Follow-up completed for Apex Holdings', type: 'task', activityDate: '2026-03-26T07:40:00.000Z' },
-    { _id: '3', subject: 'Subscription renewal flagged for ThinkRetail', type: 'subscription', activityDate: '2026-03-26T06:55:00.000Z' },
-    { _id: '4', subject: 'Qualified lead assigned to Priya Sharma', type: 'lead', activityDate: '2026-03-25T15:10:00.000Z' }
-];
-
-const fallbackLeads = [
-    { id: 'ld-1', name: 'Aman Verma', company: 'Northstar Labs', status: 'Qualified', priority: 'High', updatedAt: '2026-03-26T08:05:00.000Z' },
-    { id: 'ld-2', name: 'Riya Sen', company: 'ThinkRetail', status: 'Proposal Sent', priority: 'Medium', updatedAt: '2026-03-26T06:50:00.000Z' },
-    { id: 'ld-3', name: 'Nitin Rao', company: 'Apex Holdings', status: 'Negotiation', priority: 'High', updatedAt: '2026-03-25T17:20:00.000Z' },
-    { id: 'ld-4', name: 'Megha Bhat', company: 'BluePeak Systems', status: 'Contacted', priority: 'Low', updatedAt: '2026-03-25T12:15:00.000Z' }
-];
-
 const formatCompactNumber = (value: number) =>
     new Intl.NumberFormat('en-IN', { notation: 'compact', maximumFractionDigits: 1 }).format(value);
 
+const formatCompactCurrency = (value: number) =>
+    new Intl.NumberFormat('en-IN', {
+        style: 'currency',
+        currency: 'INR',
+        notation: 'compact',
+        maximumFractionDigits: 1,
+    }).format(value);
+
 const DashboardPage = () => {
     const dispatch = useAppDispatch();
+    const navigate = useNavigate();
     const { data, loading, error } = useAppSelector((state) => state.analytics);
     const { user } = useAppSelector((state) => state.auth);
 
@@ -56,25 +37,26 @@ const DashboardPage = () => {
     }, [dispatch]);
 
     const dashboardData = (data as DashboardData | null) ?? null;
-    const pipeline = dashboardData?.pipeline?.byStageCount?.length ? dashboardData.pipeline.byStageCount : fallbackPipeline;
-    const activities = dashboardData?.recentActivity?.length ? dashboardData.recentActivity : fallbackActivity;
-    const sources = dashboardData?.sources?.length ? dashboardData.sources : fallbackSources;
-    
-    // KPI Data
-    const totalLeads = dashboardData?.kpis?.totalLeads ?? 184;
-    const qualifiedLeads = dashboardData?.kpis?.qualifiedLeads ?? 62;
-    const pendingProposals = pipeline.find((row) => row.stage === 'Proposal Sent')?.count ?? 18;
+    const pipeline = dashboardData?.pipeline?.byStageCount ?? [];
+    const activities = dashboardData?.recentActivity ?? [];
+
+    const totalLeads = dashboardData?.kpis?.totalLeads ?? 0;
+    const qualifiedLeads = dashboardData?.kpis?.qualifiedLeads ?? 0;
+    const pendingProposals = pipeline.find((row) => row.stage === 'Proposal Sent')?.count ?? 0;
     const totalPipelineCount = Math.max(1, pipeline.reduce((sum, row) => sum + row.count, 0));
-    const revenue = (dashboardData?.kpis?.wonCount ?? 24) * 185000;
+    const totalPipelineValue = dashboardData?.kpis?.totalPipelineValue ?? 0;
+    const weightedPipelineValue = dashboardData?.kpis?.weightedPipelineValue ?? 0;
+    const followUpCount = dashboardData?.kpis?.followUpsDueToday ?? 0;
+    const expectedThisMonth = dashboardData?.forecast?.expectedThisMonth ?? 0;
 
     const summaryCards: SummaryCardItem[] = [
-        { label: 'Active Leads', value: formatCompactNumber(totalLeads), icon: <Users size={18} />, variant: 'primary' },
-        { label: 'Qualified Flow', value: formatCompactNumber(qualifiedLeads), icon: <Zap size={18} />, variant: 'success' },
-        { label: 'Pending Proposals', value: pendingProposals.toString(), icon: <Target size={18} />, variant: 'warning' },
-        { label: 'Pipeline Value', value: `₹${formatCompactNumber(revenue)}`, icon: <BriefcaseBusiness size={18} />, variant: 'purple' },
+        { label: 'Active Leads', value: loading ? '...' : formatCompactNumber(totalLeads), icon: <Users size={18} />, variant: 'primary' },
+        { label: 'Qualified Flow', value: loading ? '...' : formatCompactNumber(qualifiedLeads), icon: <Zap size={18} />, variant: 'success' },
+        { label: 'Pending Proposals', value: loading ? '...' : pendingProposals.toString(), icon: <Target size={18} />, variant: 'warning' },
+        { label: 'Pipeline Value', value: loading ? '...' : formatCompactCurrency(totalPipelineValue), icon: <BriefcaseBusiness size={18} />, variant: 'purple' },
     ];
 
-    const pipelineColumns: ModuleColumnDef<(typeof pipeline)[number]>[] = [
+    const pipelineColumns: ModuleColumnDef<PipelineRow>[] = [
         {
             id: 'stage',
             header: 'Pipeline Stage',
@@ -85,14 +67,14 @@ const DashboardPage = () => {
             id: 'progress',
             header: 'Volume',
             width: '40%',
-            cell: (row) => {
-                const pct = Math.max(5, Math.round((row.count / totalPipelineCount) * 100));
-                return (
-                    <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
-                        <div className="h-full bg-blue-500 rounded-full" style={{ width: `${pct}%` }} />
+                cell: (row) => {
+                    const pct = Math.max(5, Math.round((row.count / totalPipelineCount) * 100));
+                    return (
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-[#f3e7d8]">
+                        <div className="h-full rounded-full bg-brand-500" style={{ width: `${pct}%` }} />
                     </div>
-                );
-            }
+                    );
+                }
         },
         {
             id: 'count',
@@ -100,40 +82,6 @@ const DashboardPage = () => {
             width: '20%',
             align: 'right',
             cell: (row) => <div className="mod-table__primary-text font-bold">{row.count}</div>
-        }
-    ];
-
-    const leadsColumns: ModuleColumnDef<(typeof fallbackLeads)[number]>[] = [
-        {
-            id: 'lead',
-            header: 'Recent Lead',
-            width: '50%',
-            cell: (lead) => (
-                <div style={{ minWidth: 0 }}>
-                    <div className="mod-table__primary-text">{lead.name}</div>
-                    <div className="mod-table__secondary-text truncate">{lead.company}</div>
-                </div>
-            )
-        },
-        {
-            id: 'status',
-            header: 'Status',
-            width: '25%',
-            cell: (lead) => (
-                <ModuleBadge variant="neutral">{lead.status}</ModuleBadge>
-            )
-        },
-        {
-            id: 'priority',
-            header: 'Priority',
-            width: '25%',
-            align: 'right',
-            cell: (lead) => {
-                let v: 'danger'|'warning'|'success' = 'success';
-                if(lead.priority==='High') v='danger';
-                if(lead.priority==='Medium') v='warning';
-                return <ModuleBadge variant={v}>{lead.priority}</ModuleBadge>;
-            }
         }
     ];
 
@@ -145,7 +93,7 @@ const DashboardPage = () => {
             cell: (act) => (
                 <div style={{ minWidth: 0 }}>
                     <div className="mod-table__primary-text truncate">{act.subject}</div>
-                    <div className="mod-table__secondary-text uppercase tracking-wider text-[10px] mt-0.5">{act.type}</div>
+                    <div className="mod-table__secondary-text mt-0.5 text-[10px] uppercase tracking-wider">{act.type}</div>
                 </div>
             )
         },
@@ -156,7 +104,7 @@ const DashboardPage = () => {
             align: 'right',
             cell: (act) => (
                 <div className="mod-table__secondary-text text-[11px]">
-                    {format(parseISO(act.activityDate), 'MMM d, h:mm a')}
+                    {act.activityDate ? format(parseISO(act.activityDate), 'MMM d, h:mm a') : '--'}
                 </div>
             )
         }
@@ -168,30 +116,38 @@ const DashboardPage = () => {
                 eyebrow="Command Center"
                 title={`Good morning, ${user?.firstName || 'Team'}.`}
                 description="Track the business pulse, move urgent follow-ups faster, and keep high-value accounts progressing."
-                actions={
-                    <>
-                        <button className="mod-btn mod-btn--secondary">
-                            <Download size={14} /> Export
-                        </button>
-                        <button className="mod-btn mod-btn--primary">
-                            <Plus size={14} /> Add Lead
-                        </button>
-                    </>
-                }
+                actions={(
+                    <button
+                        className="mod-btn mod-btn--primary"
+                        onClick={() => navigate('/leads/new')}
+                    >
+                        <Plus size={14} /> Add Lead
+                    </button>
+                )}
             />
 
             {error && (
-                <div style={{
-                    padding: '12px 16px', background: 'var(--mod-danger-light)', border: '1px solid #fecaca',
-                    borderRadius: 'var(--mod-radius-lg)', color: 'var(--mod-danger-text)', fontSize: 13, fontWeight: 600, marginBottom: 16
-                }}>
-                    Dashboard data loaded with errors. Displaying partial fallback information.
-                </div>
+                <InlineAlert
+                    tone="danger"
+                    title="Dashboard unavailable"
+                    className="mb-4"
+                    action={(
+                        <button
+                            type="button"
+                            className="mod-btn mod-btn--ghost mod-btn--sm"
+                            onClick={() => void dispatch(fetchDashboardAnalytics({}))}
+                        >
+                            Retry
+                        </button>
+                    )}
+                >
+                    Failed to load dashboard data. Please try again. If the problem persists, contact support.
+                </InlineAlert>
             )}
 
             <ModuleSummaryCards cards={summaryCards} />
 
-            <div className="grid lg:grid-cols-2 gap-6 mt-6">
+            <div className="mt-6 grid gap-6 lg:grid-cols-2">
                 <ModuleDataTable
                     rows={pipeline}
                     columns={pipelineColumns}
@@ -199,21 +155,9 @@ const DashboardPage = () => {
                     loading={loading}
                     error={null}
                     tableTitle="Pipeline Performance"
-                    tableBadge={`${totalPipelineCount} active deals`}
+                    tableBadge={pipeline.length > 0 ? `${totalPipelineCount} active deals` : undefined}
                 />
 
-                <ModuleDataTable
-                    rows={fallbackLeads}
-                    columns={leadsColumns}
-                    rowKey={(r) => r.id}
-                    loading={false}
-                    error={null}
-                    tableTitle="Urgent Leads Tracker"
-                    tableBadge="Needs attention"
-                />
-            </div>
-
-            <div className="grid lg:grid-cols-2 gap-6 mt-6">
                 <ModuleDataTable
                     rows={activities.slice(0, 5)}
                     columns={activityColumns}
@@ -222,21 +166,48 @@ const DashboardPage = () => {
                     error={null}
                     tableTitle="System Activity Stream"
                 />
+            </div>
 
-                <div className="mod-card flex flex-col items-center justify-center p-8 text-center bg-gradient-to-br from-slate-50 to-white">
-                    <div className="w-16 h-16 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mb-4">
+            <div className="mt-6 grid gap-6 lg:grid-cols-1">
+                <div className="mod-card flex flex-col items-center justify-center bg-gradient-to-br from-[#fffaf4] to-[#fbf2e7] p-8 text-center">
+                    <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-brand-50 text-brand-600">
                         <AlertCircle size={28} />
                     </div>
-                    <h3 className="text-lg font-bold text-slate-900">14 Follow-ups Due Today</h3>
-                    <p className="text-[13px] text-slate-500 mt-2 mb-6 max-w-sm">
-                        You have pending items that require immediate attention. Keep your conversion rates high by addressing these directly.
+                    <div className="mb-3 inline-flex items-center rounded-full border border-brand-100 bg-brand-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-brand-700">
+                        Today&apos;s operating focus
+                    </div>
+                    {loading ? (
+                        <h3 className="text-lg font-bold text-slate-400">Loading follow-ups...</h3>
+                    ) : followUpCount > 0 ? (
+                        <h3 className="text-lg font-bold text-slate-900">{followUpCount} Follow-up{followUpCount !== 1 ? 's' : ''} Due Today</h3>
+                    ) : (
+                        <h3 className="text-lg font-bold text-slate-900">No Follow-ups Due Today</h3>
+                    )}
+                    <p className="mt-2 mb-6 max-w-sm text-[13px] text-slate-500">
+                        {followUpCount > 0
+                            ? 'You have pending items that require immediate attention. Keep your conversion rates high by addressing these directly.'
+                            : 'You are all caught up. Check back later for new tasks.'}
                     </p>
-                    <button className="mod-btn mod-btn--primary px-6">
+                    {!loading && (
+                        <div className="mb-6 grid w-full max-w-xl gap-3 sm:grid-cols-2">
+                            <div className="rounded-2xl border border-slate-200 bg-[#fffdf9] px-4 py-3 text-left shadow-[0_8px_18px_rgba(120,74,24,0.05)]">
+                                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Weighted forecast</div>
+                                <div className="mt-1 text-lg font-bold text-slate-900">{formatCompactCurrency(weightedPipelineValue)}</div>
+                            </div>
+                            <div className="rounded-2xl border border-slate-200 bg-[#fffdf9] px-4 py-3 text-left shadow-[0_8px_18px_rgba(120,74,24,0.05)]">
+                                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Expected this month</div>
+                                <div className="mt-1 text-lg font-bold text-slate-900">{formatCompactCurrency(expectedThisMonth)}</div>
+                            </div>
+                        </div>
+                    )}
+                    <button
+                        className="mod-btn mod-btn--primary px-6"
+                        onClick={() => navigate('/tasks')}
+                    >
                         View Worklist
                     </button>
                 </div>
             </div>
-
         </ModulePageShell>
     );
 };

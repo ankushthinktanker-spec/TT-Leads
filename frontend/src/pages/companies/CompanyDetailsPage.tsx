@@ -9,7 +9,7 @@ const CompanyDetailsPage = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
     const dispatch = useAppDispatch();
-    const { currentCompany, loading } = useAppSelector((state) => state.companies);
+    const { currentItem: currentCompany, loading } = useAppSelector((state) => state.companies);
 
     useEffect(() => {
         if (id) {
@@ -24,9 +24,9 @@ const CompanyDetailsPage = () => {
         return (
             <div className="page-layout flex justify-center items-center h-[60vh]">
                 <div className="relative">
-                    <div className="h-16 w-16 rounded-full border-4 border-slate-100 border-t-indigo-500 animate-spin" />
+                    <div className="h-16 w-16 rounded-full border-4 border-slate-100 border-t-brand-500 animate-spin" />
                     <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="h-2 w-2 rounded-full bg-indigo-500 animate-ping" />
+                        <div className="h-2 w-2 rounded-full bg-brand-500 animate-ping" />
                     </div>
                 </div>
             </div>
@@ -38,12 +38,12 @@ const CompanyDetailsPage = () => {
             <div className="page-layout space-y-8">
                 <button
                     onClick={() => navigate('/companies')}
-                    className="group flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500 transition-all hover:text-sky-700"
+                    className="group flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500 transition-all hover:text-brand-700"
                 >
                     <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
                     Back to Companies
                 </button>
-                <div className="rounded-[28px] border border-slate-200/80 bg-white p-12 text-center shadow-[0_18px_48px_rgba(15,23,42,0.06)]">
+                <div className="rounded-[28px] border border-slate-200/80 bg-[#fffaf4] p-12 text-center shadow-[0_18px_48px_rgba(120,74,24,0.08)]">
                     <p className="mb-2 text-xl font-black tracking-tight text-slate-900">Company not found</p>
                     <p className="text-sm font-medium text-slate-500">The requested company record could not be loaded.</p>
                 </div>
@@ -59,7 +59,7 @@ const CompanyDetailsPage = () => {
             <div className="tt-animate-fade-up">
                 <button
                     onClick={() => navigate('/companies')}
-                    className="group mb-5 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500 transition-all hover:text-sky-700"
+                    className="group mb-5 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500 transition-all hover:text-brand-700"
                 >
                     <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
                     Back to Companies
@@ -77,18 +77,18 @@ const CompanyDetailsPage = () => {
                         </div>
                         <h1 className="text-3xl font-black tracking-tight text-slate-950">{currentCompany.name}</h1>
                         <p className="text-sm font-medium text-slate-500">
-                            Review account profile, communication details, operational identifiers, and tags in one connected workspace.
+                            Review company profile, communication details, identifiers, and tags in one connected workspace.
                         </p>
                         <div className="flex flex-wrap items-center gap-2 pt-1">
-                            <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-600">
+                            <span className="rounded-full border border-slate-200 bg-[#fffdf9] px-3 py-1 text-[11px] font-semibold text-slate-600">
                                 {currentCompany.status}
                             </span>
                             {currentCompany.industry && (
-                                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-600">
+                                <span className="rounded-full border border-slate-200 bg-[#fffdf9] px-3 py-1 text-[11px] font-semibold text-slate-600">
                                     {currentCompany.industry}
                                 </span>
                             )}
-                            <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-600">
+                            <span className="rounded-full border border-slate-200 bg-[#fffdf9] px-3 py-1 text-[11px] font-semibold text-slate-600">
                                 {tagsCount} tags
                             </span>
                         </div>
@@ -114,17 +114,17 @@ const CompanyDetailsPage = () => {
                 </div>
                 <div className="workspace-section px-5 py-4">
                     <p className="mb-2 px-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Company size</p>
-                    <div className="text-xl font-black uppercase tracking-tight text-slate-900">
-                        {currentCompany.companySize || 'Unknown Size'}
+                    <div className="text-xl font-black tracking-tight text-slate-900">
+                        {currentCompany.companySize || 'Not set'}
                     </div>
                 </div>
                 <div className="workspace-section px-5 py-4">
                     <p className="mb-2 px-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Website</p>
                     {currentCompany.website ? (
-                        <a href={currentCompany.website} target="_blank" rel="noreferrer" className="line-clamp-1 text-xl font-black text-sky-700 transition-colors hover:text-sky-600">
+                        <a href={currentCompany.website} target="_blank" rel="noreferrer" className="line-clamp-1 text-xl font-black text-brand-700 transition-colors hover:text-brand-600">
                             {currentCompany.website.replace(/^https?:\/\//, '')}
                         </a>
-                    ) : <span className="text-xl font-black uppercase tracking-tight text-slate-300">None</span>}
+                    ) : <span className="text-xl font-black tracking-tight text-slate-300">Not added</span>}
                 </div>
                 <div className="workspace-section px-5 py-5 md:col-span-3 lg:hidden">
                     <div className="flex items-center justify-between">
@@ -149,13 +149,13 @@ const CompanyDetailsPage = () => {
                     >
                         <div className="space-y-6">
                             <div className="flex items-center gap-6">
-                                <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-indigo-100/50 bg-indigo-50 text-indigo-500">
+                                <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-brand-200/60 bg-brand-50 text-brand-600">
                                     <Mail size={18} />
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Email</p>
                                     {currentCompany.email ? (
-                                        <a href={`mailto:${currentCompany.email}`} className="text-base font-bold text-slate-900 hover:text-indigo-600 transition-colors block truncate">
+                                        <a href={`mailto:${currentCompany.email}`} className="text-base font-bold text-slate-900 hover:text-brand-600 transition-colors block truncate">
                                             {currentCompany.email}
                                         </a>
                                     ) : <p className="text-base font-bold text-slate-300">Not added</p>}
@@ -197,12 +197,12 @@ const CompanyDetailsPage = () => {
                         eyebrow="Location"
                     >
                         <div className="space-y-1">
-                            <p className="text-lg font-black text-slate-900">{address.street || 'No street information recorded'}</p>
+                            <p className="text-lg font-black text-slate-900">{address.street || 'No street address recorded'}</p>
                             <p className="text-base font-bold text-slate-500">
-                                {[address.city, address.state].filter(Boolean).join(', ') || 'No regional information'}
+                                {[address.city, address.state].filter(Boolean).join(', ') || 'No city or state recorded'}
                             </p>
                             <p className="text-base font-bold text-slate-500">
-                                {[address.country, address.pinCode].filter(Boolean).join(' ') || 'No sovereign information'}
+                                {[address.country, address.pinCode].filter(Boolean).join(' ') || 'No country or postal code recorded'}
                             </p>
                         </div>
                     </WorkspaceSection>
@@ -238,7 +238,7 @@ const CompanyDetailsPage = () => {
                         <div className="flex flex-wrap gap-2">
                             {currentCompany.tags?.length ? (
                                 currentCompany.tags.map((tag, idx) => (
-                                    <span key={idx} className="rounded-xl border border-sky-100 bg-sky-50 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-sky-700">
+                                    <span key={idx} className="rounded-xl border border-brand-200 bg-brand-50 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-brand-700">
                                         {tag}
                                     </span>
                                 ))
@@ -254,3 +254,5 @@ const CompanyDetailsPage = () => {
 };
 
 export default CompanyDetailsPage;
+
+

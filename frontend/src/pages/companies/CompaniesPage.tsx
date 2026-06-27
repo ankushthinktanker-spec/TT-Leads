@@ -13,12 +13,14 @@ import {
 import { useAppDispatch, useAppSelector } from '../../hooks/redux';
 import { deleteCompany, fetchCompanies } from '../../store/slices/companySlice';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import { useGlobalSearch } from '../../context/GlobalSearchContext';
 import { ROUTES } from '../../routes';
 import { showToast } from '../../utils/toast';
 import {
     ModulePageShell,
     ModulePageHeader,
     ModuleToolbar,
+    ModuleFilterDropdown,
     ModuleSummaryCards,
     ModuleDataTable,
     ModuleBadge,
@@ -31,9 +33,9 @@ import {
 const CompaniesPage = () => {
     const navigate = useNavigate();
     const dispatch = useAppDispatch();
-    const { companies, loading, pagination, error } = useAppSelector((state) => state.companies);
+    const { items: companies, loading, pagination, error } = useAppSelector((state) => state.companies);
+    const { value: search, setValue: setSearch } = useGlobalSearch();
 
-    const [search, setSearch] = useState('');
     const [industry, setIndustry] = useState('');
     const [companySize, setCompanySize] = useState('');
     const [status, setStatus] = useState('');
@@ -41,14 +43,17 @@ const CompaniesPage = () => {
     const [deleteId, setDeleteId] = useState<string | null>(null);
 
     useEffect(() => {
-        dispatch(fetchCompanies({
-            page: currentPage,
-            limit: 20,
-            search,
-            industry,
-            companySize,
-            status
-        }));
+        const timer = setTimeout(() => {
+            dispatch(fetchCompanies({
+                page: currentPage,
+                limit: 20,
+                search,
+                industry,
+                companySize,
+                status
+            }));
+        }, 300);
+        return () => clearTimeout(timer);
     }, [dispatch, currentPage, search, industry, companySize, status]);
 
     const activeFilters: ActiveFilter[] = [
@@ -68,10 +73,14 @@ const CompaniesPage = () => {
 
     const confirmDelete = async () => {
         if (!deleteId) return;
-        await dispatch(deleteCompany(deleteId));
-        setDeleteId(null);
-        dispatch(fetchCompanies({ page: currentPage, limit: 20, search, industry, companySize, status }));
-        showToast('Company deleted successfully.', 'success');
+        try {
+            await dispatch(deleteCompany(deleteId)).unwrap();
+            setDeleteId(null);
+            dispatch(fetchCompanies({ page: currentPage, limit: 20, search, industry, companySize, status }));
+            showToast('Company deleted successfully.', 'success');
+        } catch {
+            showToast('Failed to delete company.', 'error');
+        }
     };
 
     const activeCompanies = companies.filter((company) => company.status === 'Active').length;
@@ -83,6 +92,31 @@ const CompaniesPage = () => {
         { label: 'Active', value: activeCompanies, icon: <Building2 size={18} />, variant: 'success' },
         { label: 'Websites Tracked', value: companiesWithWebsite, icon: <Globe2 size={18} />, variant: 'info' },
         { label: 'Industries', value: industryMix, icon: <LayoutGrid size={18} />, variant: 'purple' },
+    ];
+
+    const industryOptions = [
+        { value: '', label: 'All industries' },
+        { value: 'Technology', label: 'Technology' },
+        { value: 'Healthcare', label: 'Healthcare' },
+        { value: 'Finance', label: 'Finance' },
+        { value: 'Manufacturing', label: 'Manufacturing' },
+        { value: 'Retail', label: 'Retail' },
+        { value: 'Other', label: 'Other' },
+    ];
+
+    const companySizeOptions = [
+        { value: '', label: 'All sizes' },
+        { value: '1-10', label: '1-10' },
+        { value: '11-50', label: '11-50' },
+        { value: '51-200', label: '51-200' },
+        { value: '201-500', label: '201-500' },
+        { value: '500+', label: '500+' },
+    ];
+
+    const statusOptions = [
+        { value: '', label: 'All statuses' },
+        { value: 'Active', label: 'Active' },
+        { value: 'Inactive', label: 'Inactive' },
     ];
 
     const columns: ModuleColumnDef<(typeof companies)[number]>[] = [
@@ -196,7 +230,7 @@ const CompaniesPage = () => {
     return (
         <ModulePageShell>
             <ModulePageHeader
-                eyebrow="CRM · Companies"
+                eyebrow="CRM / Companies"
                 title="Companies"
                 description="Organize account records, industry coverage, and account health in one structured revenue workspace."
                 actions={
@@ -223,99 +257,58 @@ const CompaniesPage = () => {
                     <>
                         <div>
                             <label className="mod-filter-panel__field-label">Industry</label>
-                            <select
-                                className="mod-toolbar__select"
-                                style={{ width: '100%' }}
+                            <ModuleFilterDropdown
+                                ariaLabel="Filter companies by industry"
+                                fullWidth
                                 value={industry}
-                                onChange={(e) => setIndustry(e.target.value)}
-                            >
-                                <option value="">All industries</option>
-                                <option value="Technology">Technology</option>
-                                <option value="Healthcare">Healthcare</option>
-                                <option value="Finance">Finance</option>
-                                <option value="Manufacturing">Manufacturing</option>
-                                <option value="Retail">Retail</option>
-                                <option value="Other">Other</option>
-                            </select>
+                                options={industryOptions}
+                                onChange={setIndustry}
+                            />
                         </div>
                         <div>
                             <label className="mod-filter-panel__field-label">Company Size</label>
-                            <select
-                                className="mod-toolbar__select"
-                                style={{ width: '100%' }}
+                            <ModuleFilterDropdown
+                                ariaLabel="Filter companies by size"
+                                fullWidth
                                 value={companySize}
-                                onChange={(e) => setCompanySize(e.target.value)}
-                            >
-                                <option value="">All sizes</option>
-                                <option value="1-10">1-10</option>
-                                <option value="11-50">11-50</option>
-                                <option value="51-200">51-200</option>
-                                <option value="201-500">201-500</option>
-                                <option value="500+">500+</option>
-                            </select>
+                                options={companySizeOptions}
+                                onChange={setCompanySize}
+                            />
                         </div>
                         <div>
                             <label className="mod-filter-panel__field-label">Status</label>
-                            <select
-                                className="mod-toolbar__select"
-                                style={{ width: '100%' }}
+                            <ModuleFilterDropdown
+                                ariaLabel="Filter companies by status"
+                                fullWidth
                                 value={status}
-                                onChange={(e) => setStatus(e.target.value)}
-                            >
-                                <option value="">All statuses</option>
-                                <option value="Active">Active</option>
-                                <option value="Inactive">Inactive</option>
-                            </select>
+                                options={statusOptions}
+                                onChange={setStatus}
+                            />
                         </div>
                     </>
                 }
             >
-                <select
-                    className="mod-toolbar__select"
+                <ModuleFilterDropdown
+                    ariaLabel="Quick industry filter"
                     value={industry}
-                    onChange={(e) => setIndustry(e.target.value)}
-                >
-                    <option value="">All industries</option>
-                    <option value="Technology">Technology</option>
-                    <option value="Healthcare">Healthcare</option>
-                    <option value="Finance">Finance</option>
-                    <option value="Manufacturing">Manufacturing</option>
-                    <option value="Retail">Retail</option>
-                    <option value="Other">Other</option>
-                </select>
+                    options={industryOptions}
+                    onChange={setIndustry}
+                />
 
-                <select
-                    className="mod-toolbar__select"
+                <ModuleFilterDropdown
+                    ariaLabel="Quick status filter"
                     value={status}
-                    onChange={(e) => setStatus(e.target.value)}
-                >
-                    <option value="">All statuses</option>
-                    <option value="Active">Active</option>
-                    <option value="Inactive">Inactive</option>
-                </select>
+                    options={statusOptions}
+                    onChange={setStatus}
+                />
             </ModuleToolbar>
-
-            {error && (
-                <div style={{
-                    padding: '12px 16px',
-                    background: 'var(--mod-danger-light)',
-                    border: '1px solid #fecaca',
-                    borderRadius: 'var(--mod-radius-lg)',
-                    color: 'var(--mod-danger-text)',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    marginBottom: 16
-                }}>
-                    {error}
-                </div>
-            )}
 
             <ModuleDataTable
                 rows={companies}
                 columns={columns}
                 rowKey={(company) => company._id}
                 loading={loading}
-                error={null}
+                error={error}
                 tableTitle="Account Registry"
                 tableBadge={`${companies.length} visible`}
                 emptyTitle="No companies yet"
@@ -330,9 +323,17 @@ const CompaniesPage = () => {
                     </button>
                 }
                 page={currentPage}
-                totalPages={pagination.pages}
+                totalPages={pagination.totalPages}
                 totalItems={pagination.total}
                 onPageChange={setCurrentPage}
+                onRetry={() => dispatch(fetchCompanies({
+                    page: currentPage,
+                    limit: 20,
+                    search,
+                    industry,
+                    companySize,
+                    status
+                }))}
                 onRowClick={(company) => navigate(`${ROUTES.companies}/${company._id}`)}
             />
 

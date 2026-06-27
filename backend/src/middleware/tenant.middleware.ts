@@ -1,4 +1,4 @@
-import { Request, NextFunction } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import { AppError } from './errorHandler';
 import mongoose from 'mongoose';
 
@@ -7,7 +7,7 @@ import mongoose from 'mongoose';
  * Extracts the tenant ID from the authenticated user and explicitly
  * binds it to requests. Rejects un-scoped requests to protected routes.
  */
-export const requireTenant = (req: Request, _res: Request, next: NextFunction) => {
+export const requireTenant = (req: Request, _res: Response, next: NextFunction) => {
     try {
         const user = req.user;
 

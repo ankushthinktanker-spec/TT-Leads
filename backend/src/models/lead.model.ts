@@ -1,4 +1,5 @@
 import mongoose, { Document, Schema } from 'mongoose';
+import LeadCounter from './lead-counter.model';
 
 export interface ILead extends Document {
     tenantId: mongoose.Types.ObjectId;
@@ -314,12 +315,18 @@ const leadSchema = new Schema<ILead>(
     }
 );
 
-// Generate lead number before validation (required field)
+// Atomically generate a unique lead number per tenant per year using $inc on a counter document.
+// This eliminates the countDocuments race condition completely.
 leadSchema.pre('validate', async function (next) {
     if (this.isNew && !this.leadNumber) {
         const year = new Date().getFullYear();
-        const count = await mongoose.model('Lead').countDocuments({ tenantId: this.tenantId });
-        this.leadNumber = `LD-${year}-${String(count + 1).padStart(4, '0')}`;
+        const counterId = `tenant:${this.tenantId}:${year}`;
+        const counter = await LeadCounter.findOneAndUpdate(
+            { _id: counterId },
+            { $inc: { seq: 1 } },
+            { new: true, upsert: true, setDefaultsOnInsert: true }
+        );
+        this.leadNumber = `LD-${year}-${String(counter!.seq).padStart(4, '0')}`;
         if (!this.lastStageChangedAt) {
             this.lastStageChangedAt = new Date();
         }
@@ -344,19 +351,6 @@ leadSchema.index({ tenantId: 1, tags: 1 });
 leadSchema.index({ tenantId: 1, priority: 1 });
 leadSchema.index({ tenantId: 1, status: 1, lastStageChangedAt: 1, ownerId: 1 });
 
-// Global indexes (if queries might not always include tenantId)
-leadSchema.index({ email: 1 });
-leadSchema.index({ phone: 1 });
-leadSchema.index({ status: 1, assignedTo: 1 });
-leadSchema.index({ createdAt: -1 });
-leadSchema.index({ assignedTo: 1, status: 1 });
-leadSchema.index({ ownerId: 1, nextFollowUpDate: 1 });
-leadSchema.index({ source: 1 });
-leadSchema.index({ nextFollowUpDate: 1 });
-leadSchema.index({ company: 1 });
-leadSchema.index({ tags: 1 });
-leadSchema.index({ priority: 1 });
-leadSchema.index({ status: 1, lastStageChangedAt: 1, ownerId: 1 });
 
 const Lead = mongoose.model<ILead>('Lead', leadSchema);
 

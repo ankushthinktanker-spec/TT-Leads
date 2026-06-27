@@ -8,6 +8,7 @@ import {
 } from '../controllers/company.controller';
 import { protect, authorize } from '../middleware/auth.middleware';
 import { checkPermission } from '../middleware/permission.middleware';
+import { Roles } from '../constants/roles';
 
 const router = express.Router();
 
@@ -20,6 +21,6 @@ router.route('/')
 router.route('/:id')
     .get(checkPermission('companies', 'view'), getCompany)
     .put(checkPermission('companies', 'edit'), updateCompany)
-    .delete(authorize('Admin', 'Manager'), checkPermission('companies', 'delete'), deleteCompany);
+    .delete(authorize(Roles.ADMIN, Roles.MANAGER), checkPermission('companies', 'delete'), deleteCompany);
 
 export default router;

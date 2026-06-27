@@ -277,7 +277,7 @@ export class PDFService {
 
         // Detect if section titles already have leading numbers (e.g. "1. About the Project")
         const hasLeadingNumbers = tocEntries.length > 0 &&
-            tocEntries.filter((e) => e.level === 1).every((e) => /^\d+[\.\)\-]\s/.test(e.title));
+            tocEntries.filter((e) => e.level === 1).every((e) => /^\d+[.)-]\s/.test(e.title));
 
         return `
             <section class="toc-page">
@@ -285,7 +285,7 @@ export class PDFService {
                 ${tocEntries.map((entry, index) => {
                     // Strip leading number from title if titles already contain numbers
                     const displayTitle = hasLeadingNumbers
-                        ? entry.title.replace(/^\d+[\.\)\-]\s*/, '')
+                        ? entry.title.replace(/^\d+[.)-]\s*/, '')
                         : entry.title;
                     return `
                     <div class="toc-item" style="padding-left: ${(entry.level - 1) * 20}px;">

@@ -38,7 +38,7 @@ export const buildPaginationMeta = (page: number, limit: number, totalItems: num
     return {
         page,
         limit,
-        totalItems: safeTotal,
+        total: safeTotal,
         totalPages
     };
 };

@@ -1,9 +1,19 @@
-/* ═══════════════════════════════════════════════════════════════
-   MODULE DESIGN SYSTEM — Premium SaaS Module UI
-   Metronic-inspired, enterprise-grade, reusable across all modules
-   ═══════════════════════════════════════════════════════════════ */
+/*
+ * Module System Design Tokens (--mod-*)
+ * This is the primary design token system for the application.
+ * All new components should use --mod-* tokens.
+ *
+ * Note: The --tt-* tokens in index.css provide base-level styling
+ * (body, headings, inputs, cards) and are used by @layer component classes.
+ * Do not duplicate those concerns here.
+ *
+ * ========================================================================
+ * Premium SaaS Module UI
+ * Enterprise-grade, reusable across all modules
+ * ========================================================================
+ */
 
-/* ─── TOKENS ─── */
+/* --- TOKENS ------------------------------------------------------------ */
 :root {
   /* Module spacing scale */
   --mod-space-1:  4px;
@@ -30,25 +40,25 @@
   --mod-shadow-elevated: 0 4px 12px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04);
   --mod-shadow-toolbar:  0 1px 3px rgba(0,0,0,0.03);
   --mod-shadow-hover:    0 8px 24px rgba(0,0,0,0.08);
-  --mod-shadow-focus:    0 0 0 3px rgba(51, 92, 255, 0.15);
+  --mod-shadow-focus:    0 0 0 3px rgba(255, 188, 0, 0.18);
   --mod-shadow-dropdown: 0 10px 38px rgba(0,0,0,0.12), 0 4px 16px rgba(0,0,0,0.08);
 
   /* Module colors (clean, enterprise) */
-  --mod-bg:              #f5f7fa;
-  --mod-surface:         #ffffff;
-  --mod-surface-hover:   #f8f9fb;
-  --mod-surface-active:  #f0f2f5;
-  --mod-border:          #e8ecf1;
-  --mod-border-strong:   #d4dbe6;
-  --mod-border-subtle:   #f0f2f5;
+  --mod-bg:              #f6ede1;
+  --mod-surface:         #fffaf4;
+  --mod-surface-hover:   #fbf2e7;
+  --mod-surface-active:  #f3e7d8;
+  --mod-border:          #eadfce;
+  --mod-border-strong:   #dbcbb5;
+  --mod-border-subtle:   #f3e8d8;
   --mod-text:            #1a1f36;
   --mod-text-secondary:  #4a5568;
   --mod-text-muted:      #717d96;
   --mod-text-subtle:     #a0aec0;
-  --mod-primary:         #3b63f7;
-  --mod-primary-hover:   #2d4fd6;
-  --mod-primary-light:   #eef2ff;
-  --mod-primary-text:    #2d3cc9;
+  --mod-primary:         #ffbc00;
+  --mod-primary-hover:   #e0a600;
+  --mod-primary-light:   #fffbea;
+  --mod-primary-text:    #8c6500;
   --mod-success:         #0d9f6e;
   --mod-success-light:   #ecfdf3;
   --mod-success-text:    #065f46;
@@ -246,6 +256,161 @@
   box-shadow: var(--mod-shadow-focus);
 }
 
+.mod-dropdown {
+  position: relative;
+  display: inline-flex;
+  min-width: 130px;
+}
+
+.mod-dropdown--full {
+  display: flex;
+  width: 100%;
+}
+
+.mod-dropdown__trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  box-shadow: none;
+  background-image: none;
+  padding-right: 12px;
+}
+
+.mod-dropdown__trigger:hover:not(:disabled) {
+  border-color: #cbd5e1;
+  background: #ffffff;
+}
+
+.mod-dropdown__trigger.is-open {
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  color: var(--mod-text);
+}
+
+.mod-dropdown__trigger:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.mod-dropdown__trigger-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mod-dropdown__chevron {
+  color: #64748b;
+  transition: transform 180ms ease, color 180ms ease;
+  flex-shrink: 0;
+}
+
+.mod-dropdown__chevron.is-open {
+  transform: rotate(180deg);
+  color: #2563eb;
+}
+
+.mod-dropdown__menu {
+  position: fixed;
+  z-index: 9999;
+  animation: mod-filter-dropdown-in 160ms ease-out;
+}
+
+.mod-dropdown__menu[data-placement='top'] {
+  animation-name: mod-filter-dropdown-in-up;
+}
+
+.mod-dropdown__list {
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
+  padding: 6px;
+  max-height: inherit;
+  overflow-y: auto;
+}
+
+.mod-dropdown__option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 38px;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.25;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease, transform 140ms ease;
+}
+
+.mod-dropdown__option:hover,
+.mod-dropdown__option.is-highlighted {
+  background: #faf4ec;
+  color: #0f172a;
+}
+
+.mod-dropdown__option.is-selected {
+  background: #fff7ed;
+  color: #c2410c;
+  font-weight: 600;
+}
+
+.mod-dropdown__option.is-selected:hover,
+.mod-dropdown__option.is-selected.is-highlighted {
+  background: #fff1bf;
+}
+
+.mod-dropdown__option:focus-visible {
+  outline: none;
+  background: #fff7ed;
+  box-shadow: inset 0 0 0 1px rgba(234, 88, 12, 0.18);
+}
+
+.mod-dropdown__option-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mod-dropdown__option-check {
+  flex-shrink: 0;
+  color: #2563eb;
+}
+
+@keyframes mod-filter-dropdown-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes mod-filter-dropdown-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* Toolbar icon button */
 .mod-toolbar__icon-btn {
   display: inline-flex;
@@ -269,7 +434,7 @@
 
 .mod-toolbar__icon-btn.is-active {
   background: var(--mod-primary-light);
-  border-color: rgba(59, 99, 247, 0.3);
+  border-color: rgba(249, 115, 22, 0.3);
   color: var(--mod-primary);
 }
 
@@ -299,8 +464,21 @@
 
 .mod-toolbar__btn.is-active {
   background: var(--mod-primary-light);
-  border-color: rgba(59, 99, 247, 0.3);
+  border-color: rgba(249, 115, 22, 0.3);
   color: var(--mod-primary);
+}
+
+.mod-toolbar__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--mod-primary);
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
 }
 
 /* Record count */
@@ -338,7 +516,7 @@
   font-weight: 600;
   color: var(--mod-primary-text);
   background: var(--mod-primary-light);
-  border: 1px solid rgba(59, 99, 247, 0.15);
+  border: 1px solid rgba(249, 115, 22, 0.15);
   border-radius: 99px;
   cursor: default;
   transition: background 120ms;
@@ -363,7 +541,7 @@
 }
 
 .mod-filter-chip__remove:hover {
-  background: rgba(59, 99, 247, 0.15);
+  background: rgba(249, 115, 22, 0.15);
 }
 
 .mod-toolbar__clear-btn {
@@ -492,6 +670,10 @@
   box-shadow: var(--mod-shadow-card);
 }
 
+.mod-table-scroll {
+  overflow-x: visible;
+}
+
 .mod-table-container__header {
   display: flex;
   align-items: center;
@@ -515,7 +697,7 @@
   height: 7px;
   border-radius: 50%;
   background: var(--mod-primary);
-  box-shadow: 0 0 0 3px rgba(59, 99, 247, 0.12);
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.12);
 }
 
 .mod-table-container__badge {
@@ -606,6 +788,113 @@
 
 .mod-table td.mod-table--right {
   text-align: right;
+}
+
+.mod-table-cards {
+  display: none;
+  padding: var(--mod-space-3);
+  gap: var(--mod-space-3);
+}
+
+.mod-table-cards__state {
+  padding: var(--mod-space-2) 0;
+}
+
+.mod-table-card {
+  border: 1px solid var(--mod-border);
+  border-radius: var(--mod-radius-lg);
+  background: linear-gradient(180deg, #ffffff 0%, #fbf3e8 100%);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+  padding: var(--mod-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--mod-space-4);
+}
+
+.mod-table-card--interactive {
+  cursor: pointer;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.mod-table-card--interactive:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+  transform: translateY(-1px);
+}
+
+.mod-table-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--mod-space-3);
+}
+
+.mod-table-card__title-group {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--mod-space-3);
+}
+
+.mod-table-card__title-content {
+  min-width: 0;
+  flex: 1;
+}
+
+.mod-table-card__check {
+  padding-top: 2px;
+  flex-shrink: 0;
+}
+
+.mod-table-card__label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--mod-text-subtle);
+  margin-bottom: 6px;
+}
+
+.mod-table-card__title,
+.mod-table-card__value {
+  min-width: 0;
+  color: var(--mod-text);
+}
+
+.mod-table-card__title .mod-table__primary-text,
+.mod-table-card__title .mod-table__secondary-text,
+.mod-table-card__value .mod-table__primary-text,
+.mod-table-card__value .mod-table__secondary-text {
+  white-space: normal;
+}
+
+.mod-table-card__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--mod-space-3);
+}
+
+.mod-table-card__field {
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: var(--mod-radius-md);
+  background: #faf4ec;
+  border: 1px solid #edf2f7;
+}
+
+.mod-table-card__value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--mod-text-secondary);
+}
+
+.mod-table-card__value--right {
+  text-align: right;
+}
+
+.mod-table-card__actions {
+  flex-shrink: 0;
 }
 
 /* Row checkbox */
@@ -774,7 +1063,7 @@
   justify-content: space-between;
   padding: var(--mod-space-3) var(--mod-space-5);
   border-top: 1px solid var(--mod-border);
-  background: #fafbfc;
+  background: #f8efe4;
 }
 
 .mod-pagination__info {
@@ -829,6 +1118,106 @@
   border-color: var(--mod-primary);
 }
 
+@media (max-width: 1023px) {
+  .mod-toolbar {
+    padding: var(--mod-space-3);
+  }
+
+  .mod-toolbar__search {
+    max-width: none;
+    min-width: 100%;
+  }
+
+  .mod-toolbar__group {
+    width: 100%;
+  }
+
+  .mod-toolbar__divider {
+    display: none;
+  }
+}
+
+@media (max-width: 767px) {
+  .mod-page {
+    padding: var(--mod-space-4);
+    gap: var(--mod-space-4);
+  }
+
+  .mod-header__actions {
+    width: 100%;
+  }
+
+  .mod-header__actions > * {
+    width: 100%;
+  }
+
+  .mod-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .mod-toolbar {
+    gap: var(--mod-space-2);
+  }
+
+  .mod-toolbar__group {
+    gap: var(--mod-space-2);
+  }
+
+  .mod-toolbar__group > * {
+    flex: 1 1 calc(50% - 4px);
+    min-width: 0;
+  }
+
+  .mod-dropdown,
+  .mod-toolbar__btn,
+  .mod-toolbar__icon-btn {
+    width: 100%;
+  }
+
+  .mod-filter-chip {
+    max-width: 100%;
+  }
+
+  .mod-table-scroll {
+    display: none;
+  }
+
+  .mod-table-cards {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .mod-table-container__header {
+    padding: var(--mod-space-3) var(--mod-space-4);
+    align-items: flex-start;
+    gap: var(--mod-space-2);
+  }
+
+  .mod-table-container__badge {
+    align-self: flex-start;
+  }
+
+  .mod-table-card__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .mod-pagination {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--mod-space-3);
+    padding: var(--mod-space-4);
+  }
+
+  .mod-pagination__controls {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .mod-pagination__btn {
+    flex: 0 0 auto;
+  }
+}
+
 /* ─── ROW ACTIONS ─── */
 .mod-row-actions {
   display: flex;
@@ -859,7 +1248,7 @@
 
 .mod-row-actions__btn--primary:hover {
   background: var(--mod-primary-light);
-  border-color: rgba(59, 99, 247, 0.2);
+  border-color: rgba(249, 115, 22, 0.2);
   color: var(--mod-primary);
 }
 
@@ -1022,7 +1411,7 @@
   justify-content: space-between;
   padding: var(--mod-space-4) var(--mod-space-6);
   border-top: 1px solid var(--mod-border);
-  background: #fafbfc;
+  background: #f8efe4;
 }
 
 /* ─── EMPTY STATE ─── */
@@ -1090,12 +1479,12 @@
   background: var(--mod-primary);
   color: white;
   border-color: var(--mod-primary);
-  box-shadow: 0 1px 3px rgba(59, 99, 247, 0.2);
+  box-shadow: 0 1px 3px rgba(249, 115, 22, 0.2);
 }
 
 .mod-btn--primary:hover:not(:disabled) {
   background: var(--mod-primary-hover);
-  box-shadow: 0 4px 12px rgba(59, 99, 247, 0.28);
+  box-shadow: 0 4px 12px rgba(249, 115, 22, 0.28);
 }
 
 .mod-btn--secondary {
@@ -1156,3 +1545,5 @@
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+
+

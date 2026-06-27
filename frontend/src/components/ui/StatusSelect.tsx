@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { useFloatingMenu } from './useFloatingMenu';
 
 interface StatusSelectProps {
     value: string;
@@ -21,16 +23,50 @@ const StatusSelect = ({
 }: StatusSelectProps) => {
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
+    const triggerRef = useRef<HTMLButtonElement>(null);
+    const menuRef = useRef<HTMLDivElement>(null);
+    const { floatingStyle, placement, updatePosition } = useFloatingMenu({
+        open: isOpen,
+        triggerRef,
+        menuRef,
+        gap: 6,
+        minWidth: 192,
+        maxHeight: 240,
+    });
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
-            if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+            const target = event.target as Node;
+            const clickedTrigger = triggerRef.current?.contains(target);
+            const clickedMenu = menuRef.current?.contains(target);
+            if (!clickedTrigger && !clickedMenu) {
                 setIsOpen(false);
             }
         };
+
+        const handleEscape = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                setIsOpen(false);
+                triggerRef.current?.focus();
+            }
+        };
+
         document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
+        document.addEventListener('keydown', handleEscape);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('keydown', handleEscape);
+        };
     }, []);
+
+    useEffect(() => {
+        if (!isOpen) {
+            return;
+        }
+
+        const frame = window.requestAnimationFrame(() => updatePosition());
+        return () => window.cancelAnimationFrame(frame);
+    }, [isOpen, updatePosition]);
 
     const handleToggle = (e: React.MouseEvent) => {
         e.stopPropagation(); // Prevent row click if any
@@ -46,6 +82,7 @@ const StatusSelect = ({
     return (
         <div className={cn("relative inline-block text-left", className)} ref={containerRef}>
             <button
+                ref={triggerRef}
                 type="button"
                 disabled={disabled}
                 onClick={handleToggle}
@@ -60,8 +97,13 @@ const StatusSelect = ({
                 {!disabled && <ChevronDown size={14} className={cn("transition-transform duration-200 text-current/60 flex-shrink-0", isOpen && "rotate-180")} />}
             </button>
 
-            {isOpen && (
-                <div className="absolute left-0 mt-2 w-48 rounded-xl bg-white border border-slate-200 shadow-xl z-[100] overflow-hidden animate-in fade-in zoom-in duration-200">
+            {isOpen && typeof document !== 'undefined' && createPortal(
+                <div
+                    ref={menuRef}
+                    className="rounded-xl bg-[#fffaf4] border border-slate-200 shadow-[0_12px_30px_rgba(120,74,24,0.12)] overflow-hidden z-[9999] animate-in fade-in zoom-in duration-200"
+                    data-placement={placement}
+                    style={floatingStyle}
+                >
                     <div className="py-1 max-h-60 overflow-y-auto">
                         {options.map((option) => (
                             <button
@@ -71,8 +113,8 @@ const StatusSelect = ({
                                 className={cn(
                                     "w-full text-left px-4 py-2.5 text-xs font-medium transition-colors flex items-center justify-between",
                                     value === option
-                                        ? "bg-slate-50 text-slate-900"
-                                        : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                                        ? "bg-[#fbf2e7] text-slate-900"
+                                        : "text-slate-600 hover:bg-[#fbf2e7] hover:text-slate-900"
                                 )}
                             >
                                 <div className="flex items-center gap-2">
@@ -85,10 +127,12 @@ const StatusSelect = ({
                             </button>
                         ))}
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     );
 };
 
 export default StatusSelect;
+

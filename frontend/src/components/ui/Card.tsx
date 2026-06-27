@@ -12,11 +12,11 @@ interface CardProps {
 
 const Card = ({ title, subtitle, actions, children, className, variant = 'surface' }: CardProps) => {
     const variantClasses = {
-        surface: 'rounded-[18px] border border-slate-200 bg-white shadow-[0_8px_24px_rgba(15,23,42,0.04)]',
-        glass: 'rounded-[18px] border border-white/70 bg-white/80 shadow-[0_10px_28px_rgba(15,23,42,0.05)] backdrop-blur-xl',
-        raised: 'rounded-[20px] border border-slate-200 bg-white shadow-[0_14px_32px_rgba(15,23,42,0.06)]',
-        muted: 'rounded-[18px] border border-slate-200 bg-slate-50/80 shadow-[0_6px_18px_rgba(15,23,42,0.03)]',
-        panel: 'rounded-[20px] border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#fbfcfe_100%)] shadow-[0_10px_26px_rgba(15,23,42,0.05)]'
+        surface: 'tt-card',
+        glass: 'glass-card',
+        raised: 'tt-card tt-card-hover',
+        muted: 'tt-card-subtle',
+        panel: 'panel-card'
     };
 
     return (

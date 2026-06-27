@@ -27,9 +27,12 @@ interface ContactFormModalProps {
     onClose: () => void;
 }
 
+const getCompanyIdValue = (companyId?: { _id?: string } | string): string =>
+    typeof companyId === 'string' ? companyId : companyId?._id || '';
+
 const ContactFormModal = ({ contact, onClose }: ContactFormModalProps) => {
     const dispatch = useAppDispatch();
-    const { companies } = useAppSelector((state) => state.companies);
+    const { items: companies } = useAppSelector((state) => state.companies);
     const { loading } = useAppSelector((state) => state.contacts);
 
     const [formData, setFormData] = useState({
@@ -62,7 +65,7 @@ const ContactFormModal = ({ contact, onClose }: ContactFormModalProps) => {
                 phone: contact.phone || '',
                 alternatePhone: contact.alternatePhone || '',
                 whatsapp: contact.whatsapp || '',
-                companyId: (contact.companyId as any)?._id || (contact.companyId as string) || '',
+                companyId: getCompanyIdValue(contact.companyId),
                 isPrimary: contact.isPrimary || false,
                 status: contact.status || 'Active',
                 notes: contact.notes || ''
@@ -165,7 +168,7 @@ const ContactFormModal = ({ contact, onClose }: ContactFormModalProps) => {
                         </div>
                     </div>
 
-                    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="rounded-2xl border border-[var(--mod-border)] bg-[#fffaf4] p-4">
                         <div className="mb-4 flex items-center gap-3">
                             <span className="h-px flex-1 bg-slate-200" />
                             <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.3em]">Role information</span>
@@ -197,7 +200,7 @@ const ContactFormModal = ({ contact, onClose }: ContactFormModalProps) => {
                         </div>
                     </div>
 
-                    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="rounded-2xl border border-[var(--mod-border)] bg-[#fffaf4] p-4">
                         <div className="mb-4 flex items-center gap-3">
                             <span className="h-px flex-1 bg-slate-200" />
                             <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.3em]">Communication details</span>
@@ -254,17 +257,17 @@ const ContactFormModal = ({ contact, onClose }: ContactFormModalProps) => {
                         </div>
                     </div>
 
-                    <div className="md:col-span-2 flex items-center justify-between rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4">
+                    <div className="md:col-span-2 flex items-center justify-between rounded-2xl border border-brand-200 bg-brand-50/70 p-4">
                         <div>
-                            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-indigo-900">Primary contact</p>
-                            <p className="text-[11px] font-medium tracking-wide text-indigo-600">Use this when the person is the main point of contact for the company.</p>
+                            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand-900">Primary contact</p>
+                            <p className="text-[11px] font-medium tracking-wide text-brand-600">Use this when the person is the main point of contact for the company.</p>
                         </div>
                         <input
                             type="checkbox"
                             name="isPrimary"
                             checked={formData.isPrimary}
                             onChange={handleChange}
-                            className="h-6 w-6 rounded-lg border-indigo-200 text-indigo-600 focus:ring-indigo-500/20 cursor-pointer"
+                            className="h-6 w-6 rounded-lg border-indigo-200 text-brand-600 focus:ring-indigo-500/20 cursor-pointer"
                         />
                     </div>
 
@@ -286,4 +289,5 @@ const ContactFormModal = ({ contact, onClose }: ContactFormModalProps) => {
 };
 
 export default ContactFormModal;
+
 

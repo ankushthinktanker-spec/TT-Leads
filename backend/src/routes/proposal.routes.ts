@@ -25,6 +25,7 @@ import { protect, authorize } from '../middleware/auth.middleware';
 import { checkPermission } from '../middleware/permission.middleware';
 import { isAllowedFile, sanitizeUploadFileName } from '../utils/fileSecurity.utils';
 import { sensitiveLimiter } from '../middleware/rateLimiter';
+import { Roles } from '../constants/roles';
 
 const router = express.Router();
 
@@ -71,7 +72,7 @@ router.post('/from-template/:templateId', checkPermission('proposals', 'create')
 router.route('/:id')
     .get(checkPermission('proposals', 'view'), getProposal)
     .put(checkPermission('proposals', 'edit'), updateProposal)
-    .delete(authorize('Admin', 'Manager'), checkPermission('proposals', 'delete'), deleteProposal);
+    .delete(authorize(Roles.ADMIN, Roles.MANAGER), checkPermission('proposals', 'delete'), deleteProposal);
 
 // Section management
 router.post('/:id/sections', checkPermission('proposals', 'edit'), addSection);

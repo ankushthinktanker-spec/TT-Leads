@@ -61,7 +61,7 @@ export class BaseRepository<T extends Document> {
         return this.model.countDocuments(this.enforceTenantScope(tenantId, query)).exec();
     }
 
-    async exists(tenantId: string, query: FilterQuery<T>): Promise<{ _id: any } | null> {
+    async exists(tenantId: string, query: FilterQuery<T>): Promise<{ _id: unknown } | null> {
         return this.model.exists(this.enforceTenantScope(tenantId, query));
     }
 }

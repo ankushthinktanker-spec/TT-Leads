@@ -28,6 +28,44 @@ const asJson = async (res: Response): Promise<Record<string, unknown>> => {
     return (await res.json()) as Record<string, unknown>;
 };
 
+interface TokenPayload {
+    token?: string;
+}
+
+interface AuthResponseBody extends Record<string, unknown> {
+    token?: string;
+    data?: TokenPayload;
+}
+
+interface LeadResponseBody extends Record<string, unknown> {
+    data?: {
+        lead?: {
+            _id?: string;
+        };
+    };
+}
+
+interface ProposalResponseBody extends Record<string, unknown> {
+    data?: {
+        proposal?: {
+            _id?: string;
+        };
+    };
+}
+
+const getAuthToken = (body: Record<string, unknown>): string | undefined => {
+    const authBody = body as AuthResponseBody;
+    return authBody.data?.token || authBody.token;
+};
+
+const getLeadId = (body: Record<string, unknown>): string | undefined => {
+    return (body as LeadResponseBody).data?.lead?._id;
+};
+
+const getProposalId = (body: Record<string, unknown>): string | undefined => {
+    return (body as ProposalResponseBody).data?.proposal?._id;
+};
+
 const postJson = async (url: string, body: Record<string, unknown>, token?: string): Promise<Response> => {
     return fetch(url, {
         method: 'POST',
@@ -119,14 +157,14 @@ const main = async () => {
             password: 'SecurePassword123!'
         });
         const bodyA = await asJson(loginA);
-        const tokenA = ((bodyA.data as any)?.token) || ((bodyA as any)?.token);
+        const tokenA = getAuthToken(bodyA);
 
         const loginB = await postJson(`${baseUrl}/api/auth/login`, {
             email: adminB.email,
             password: 'SecurePassword123!'
         });
         const bodyB = await asJson(loginB);
-        const tokenB = ((bodyB.data as any)?.token) || ((bodyB as any)?.token);
+        const tokenB = getAuthToken(bodyB);
 
         assert(tokenA && tokenB, 'Tokens must be issued');
 
@@ -152,7 +190,8 @@ const main = async () => {
         assert.strictEqual(createLeadA.status, 201, 'Lead creation in Tenant A should succeed');
         
         const resLeadA = await asJson(createLeadA);
-        const leadAId = (resLeadA.data as any).lead._id;
+        const leadAId = getLeadId(resLeadA);
+        assert(leadAId, 'Lead A identifier must be returned');
 
         const readLeadAFromB = await getJson(`${baseUrl}/api/leads/${leadAId}`, tokenB);
         assert.strictEqual(readLeadAFromB.status, 404, 'Tenant B should receive 404 for Tenant A lead');
@@ -192,7 +231,8 @@ const main = async () => {
         assert.strictEqual(createProposalA.status, 201, 'Proposal creation in Tenant A should succeed');
         
         const resProposalA = await asJson(createProposalA);
-        const proposalAId = (resProposalA.data as any).proposal._id;
+        const proposalAId = getProposalId(resProposalA);
+        assert(proposalAId, 'Proposal A identifier must be returned');
 
         const readProposalAFromB = await getJson(`${baseUrl}/api/proposals/${proposalAId}`, tokenB);
         assert.strictEqual(readProposalAFromB.status, 404, 'Tenant B should receive 404 for Tenant A proposal');

@@ -35,6 +35,13 @@ const formatDateTime = (value?: string) => {
     });
 };
 
+const formatCurrency = (value?: number) =>
+    new Intl.NumberFormat('en-IN', {
+        style: 'currency',
+        currency: 'INR',
+        maximumFractionDigits: 0,
+    }).format(value || 0);
+
 export const LeadDetailsPage = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
@@ -116,10 +123,10 @@ export const LeadDetailsPage = () => {
                         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
                             <div className="flex items-center gap-8">
                             <div className="relative group">
-                                <div className="relative flex h-20 w-20 items-center justify-center rounded-[24px] bg-white text-3xl font-black text-slate-900 shadow-[0_12px_28px_rgba(15,23,42,0.08)] ring-1 ring-slate-200 transition-all duration-500">
+                                <div className="relative flex h-20 w-20 items-center justify-center rounded-[24px] bg-[#fffdf9] text-3xl font-black text-slate-900 shadow-[0_12px_28px_rgba(120,74,24,0.08)] ring-1 ring-slate-200 transition-all duration-500">
                                     {lead.firstName?.[0]}{lead.lastName?.[0]}
                                 </div>
-                                <div className="absolute -bottom-2 -right-2 flex h-8 w-8 items-center justify-center rounded-full border-4 border-white bg-emerald-500 shadow-lg">
+                                <div className="absolute -bottom-2 -right-2 flex h-8 w-8 items-center justify-center rounded-full border-4 border-[#fffaf4] bg-emerald-500 shadow-lg">
                                     <div className="h-2 w-2 rounded-full bg-white animate-pulse" />
                                 </div>
                             </div>
@@ -187,12 +194,12 @@ export const LeadDetailsPage = () => {
                 <div className="workspace-section px-4 py-4">
                     <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Owner</p>
                     <div className="mt-2 flex items-center gap-3">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-[10px] font-black text-slate-900">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-[#fffdf9] text-[10px] font-black text-slate-900">
                             {ownerName?.[0] || 'U'}
                         </div>
                         <div>
                             <p className="text-sm font-bold text-slate-900">{ownerName || 'Unassigned'}</p>
-                            <p className="text-[11px] text-slate-500">Record accountability</p>
+                            <p className="text-[11px] text-slate-500">Lead owner</p>
                         </div>
                     </div>
                 </div>
@@ -200,19 +207,19 @@ export const LeadDetailsPage = () => {
                     <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Next follow-up</p>
                     <div className="mt-2">
                         <p className="text-sm font-bold text-slate-900">{nextFollowUpLabel}</p>
-                        <p className="text-[11px] text-slate-500">Pipeline next action</p>
+                        <p className="text-[11px] text-slate-500">Next planned action</p>
                     </div>
                 </div>
             </div>
 
             <div className="workspace-sheet">
                 <div className="overflow-hidden">
-                    <div className="border-b border-slate-100 bg-slate-50/50 px-8 pt-4">
+                    <div className="border-b border-slate-100 bg-[#fbf2e7]/70 px-8 pt-4">
                         <div className="flex items-center justify-between pb-1">
                             <Tabs tabs={tabs} value={activeTab} onChange={setActiveTab} />
                             <div className="hidden lg:flex items-center gap-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                                <Clock3 size={14} className="text-indigo-500" />
-                                Sync Active: {formatDateTime(lead.updatedAt)}
+                                <Clock3 size={14} className="text-brand-500" />
+                                Updated: {formatDateTime(lead.updatedAt)}
                             </div>
                         </div>
                     </div>
@@ -229,23 +236,23 @@ export const LeadDetailsPage = () => {
                                     >
                                         <div className="space-y-6">
                                             <div className="flex items-center gap-5">
-                                                <div className="h-12 w-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shadow-sm">
+                                                <div className="h-12 w-12 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center shadow-sm">
                                                     <Mail size={20} />
                                                 </div>
                                                 <div>
                                                     <p className="text-[10px] uppercase font-black text-slate-400 tracking-tighter">Email</p>
-                                                    <p className="text-sm font-black text-slate-900 tracking-tight group-hover:text-indigo-600 transition-colors uppercase truncate">
+                                                    <p className="text-sm font-black text-slate-900 tracking-tight group-hover:text-brand-600 transition-colors truncate">
                                                         {lead.email || 'Not added'}
                                                     </p>
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-5">
-                                                <div className="h-12 w-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shadow-sm">
+                                                <div className="h-12 w-12 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center shadow-sm">
                                                     <Phone size={20} />
                                                 </div>
                                                 <div>
                                                     <p className="text-[10px] uppercase font-black text-slate-400 tracking-tighter">Phone</p>
-                                                    <p className="text-sm font-black text-slate-900 tracking-tight group-hover:text-blue-600 transition-colors">
+                                                    <p className="text-sm font-black text-slate-900 tracking-tight group-hover:text-brand-600 transition-colors">
                                                         {lead.phone || 'Not added'}
                                                     </p>
                                                 </div>
@@ -262,7 +269,7 @@ export const LeadDetailsPage = () => {
                                         <div className="space-y-6">
                                             <div className="flex items-center justify-between">
                                                 <span className="text-xs font-bold tracking-tight text-slate-500">Source</span>
-                                                <span className="text-xs font-black text-slate-900 uppercase tracking-widest">{lead.source || 'Organic'}</span>
+                                                <span className="text-xs font-black text-slate-900 uppercase tracking-widest">{lead.source || 'Direct'}</span>
                                             </div>
                                             <div className="flex items-center justify-between">
                                                 <span className="text-xs font-bold tracking-tight text-slate-500">Priority</span>
@@ -328,10 +335,10 @@ export const LeadDetailsPage = () => {
                                         <p className="text-sm font-medium text-slate-500">Add sales context, conversation summaries, and internal follow-up notes.</p>
                                     </div>
                                     <div className="relative group">
-                                        <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-[2rem] blur opacity-10 group-focus-within:opacity-25 transition duration-500" />
-                                        <div className="relative p-8 rounded-[2rem] bg-white border border-slate-100 shadow-xl space-y-6">
+                                        <div className="absolute -inset-1 bg-gradient-to-r from-brand-500 to-brand-400 rounded-[2rem] blur opacity-10 group-focus-within:opacity-25 transition duration-500" />
+                                        <div className="relative p-8 rounded-[2rem] bg-[#fffaf4] border border-slate-100 shadow-[0_24px_48px_rgba(120,74,24,0.10)] space-y-6">
                                             <textarea
-                                                className="w-full min-h-[200px] p-6 bg-slate-50/50 border border-slate-100 rounded-3xl text-sm font-bold text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/5 transition-all outline-none resize-none"
+                                                className="w-full min-h-[200px] p-6 bg-slate-50/50 border border-slate-100 rounded-3xl text-sm font-bold text-slate-900 placeholder:text-slate-400 focus:bg-[#fffdf9] focus:border-brand-400 focus:ring-4 focus:ring-brand-500/8 transition-all outline-none resize-none"
                                                 value={noteText}
                                                 onChange={(e) => setNoteText(e.target.value)}
                                                 placeholder="Add a note for this lead..."
@@ -340,9 +347,9 @@ export const LeadDetailsPage = () => {
                                                 <button 
                                                     onClick={handleAddNote} 
                                                     disabled={!noteText.trim()}
-                                                    className="px-10 py-4 rounded-2xl bg-indigo-600 text-white font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-indigo-600/20 hover:bg-indigo-500 disabled:opacity-50 disabled:shadow-none transition-all active:scale-95"
+                                                    className="px-10 py-4 rounded-2xl bg-brand-600 text-white font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-brand-600/20 hover:bg-brand-500 disabled:opacity-50 disabled:shadow-none transition-all active:scale-95"
                                                 >
-                                                    Save note
+                                                    Add note
                                                 </button>
                                             </div>
                                         </div>
@@ -360,17 +367,17 @@ export const LeadDetailsPage = () => {
                                         </div>
                                         <h3 className="mb-2 text-xl font-black text-slate-900">No proposals yet</h3>
                                         <p className="mx-auto mb-8 max-w-xs text-sm font-medium text-slate-400">
-                                            Create the first proposal for this lead to start tracking proposal progress.
+                                            Create the first proposal linked to this lead to begin tracking commercial progress.
                                         </p>
                                         <Button 
                                             onClick={() => navigate(`${ROUTES.proposals}/new?leadId=${lead._id}`)}
-                                            className="px-8 py-3 rounded-xl font-black tracking-widest bg-indigo-600"
+                                            className="px-8 py-3 rounded-xl font-black tracking-widest bg-brand-600"
                                         >
                                             Create proposal
                                         </Button>
                                     </div>
                                 ) : (
-                                    <div className="overflow-x-auto rounded-[2rem] border border-slate-100 bg-white/50 backdrop-blur-sm">
+                                    <div className="overflow-x-auto rounded-[2rem] border border-slate-100 bg-[#fffaf4]/80 backdrop-blur-sm">
                                         <table className="w-full border-collapse">
                                             <thead>
                                                 <tr className="bg-slate-50/50">
@@ -383,9 +390,9 @@ export const LeadDetailsPage = () => {
                                             </thead>
                                             <tbody className="divide-y divide-slate-100">
                                                 {leadProposals.map((proposal) => (
-                                                    <tr key={proposal._id} className="group hover:bg-indigo-50/30 transition-all duration-300">
+                                                    <tr key={proposal._id} className="group hover:bg-brand-50/60 transition-all duration-300">
                                                         <td className="px-8 py-5">
-                                                            <p className="font-black text-slate-900 group-hover:text-indigo-600 transition-colors tracking-tight">{proposal.title}</p>
+                                                            <p className="font-black text-slate-900 group-hover:text-brand-600 transition-colors tracking-tight">{proposal.title}</p>
                                                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{proposal.proposalNumber}</p>
                                                         </td>
                                                         <td className="px-6 py-5">
@@ -394,20 +401,20 @@ export const LeadDetailsPage = () => {
                                                             </Badge>
                                                         </td>
                                                         <td className="px-6 py-5 font-black text-slate-900">
-                                                            INR {(proposal.totalAmount || proposal.totalValue || 0).toLocaleString()}
+                                                            {formatCurrency(proposal.totalAmount || proposal.totalValue || 0)}
                                                         </td>
                                                         <td className="px-6 py-5 text-xs font-bold text-slate-500">
                                                             {formatDateTime(proposal.updatedAt)}
                                                         </td>
                                                         <td className="px-8 py-5 text-right">
                                                             <button 
-                                                                className="px-6 py-2 rounded-xl border border-slate-200 text-xs font-black uppercase tracking-widest text-slate-600 hover:border-indigo-400 hover:text-indigo-600 hover:bg-white transition-all shadow-sm"
+                                                                className="px-6 py-2 rounded-xl border border-slate-200 text-xs font-black uppercase tracking-widest text-slate-600 hover:border-brand-300 hover:text-brand-600 hover:bg-[#fffdf9] transition-all shadow-sm"
                                                                 onClick={(e) => {
                                                                     e.preventDefault();
                                                                     navigate(`${ROUTES.proposals}/${proposal._id}`);
                                                                 }}
                                                             >
-                                                                Open
+                                                                View proposal
                                                             </button>
                                                         </td>
                                                     </tr>
@@ -433,5 +440,7 @@ export const LeadDetailsPage = () => {
         </div>
     );
 };
+
+
 
 

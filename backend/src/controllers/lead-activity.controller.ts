@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import Lead from '../models/lead.model';
 import LeadActivity from '../models/lead-activity.model';
 import { AppError } from '../middleware/errorHandler';
+import { Roles } from '../constants/roles';
 import { AuthRequest } from '../middleware/auth.middleware';
 
 const canAccessLead = (
@@ -10,7 +11,7 @@ const canAccessLead = (
     user: AuthRequest['user']
 ) => {
     if (!user) return false;
-    if (user.role === 'Admin' || user.role === 'Manager') return true;
+    if (user.role === Roles.ADMIN || user.role === Roles.MANAGER) return true;
     return lead.assignedTo?.toString() === user._id.toString();
 };
 

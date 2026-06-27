@@ -1,3 +1,5 @@
+import { escapeRegex } from './regex.utils';
+
 type QueryValue = string | string[] | undefined;
 
 const normalizeQueryValue = (value: QueryValue): string | undefined => {
@@ -44,7 +46,7 @@ export const applySearchFilter = <T extends Record<string, unknown>>(
 ): T => {
     if (!term) return filter;
     const orClause = fields.map((field) => ({
-        [field]: { $regex: term, $options: 'i' }
+        [field]: { $regex: escapeRegex(term), $options: 'i' }
     }));
     if (Array.isArray((filter as { $or?: unknown }).$or)) {
         const existingAnd: unknown[] = Array.isArray((filter as { $and?: unknown[] }).$and)

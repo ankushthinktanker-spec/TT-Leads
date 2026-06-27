@@ -36,14 +36,14 @@ interface ContactRecord {
 
 export const ContactsPage = () => {
     const dispatch = useAppDispatch();
-    const { contacts, loading, error, pagination } = useAppSelector((state) => state.contacts);
-    const { companies } = useAppSelector((state) => state.companies);
-    const safePagination = pagination ?? { page: 1, pages: 1, total: 0, limit: 10 };
+    const { items: contacts, loading, error, pagination } = useAppSelector((state) => state.contacts);
+    const { items: companies } = useAppSelector((state) => state.companies);
+    const safePagination = pagination ?? { page: 1, totalPages: 1, total: 0, limit: 10 };
 
     const { value: search, setValue: setSearch } = useGlobalSearch();
     const [companyFilter, setCompanyFilter] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
-    const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
+    const [sortOrder] = useState<SortOrder>('desc');
     const [currentPage, setCurrentPage] = useState(1);
     
     const [showModal, setShowModal] = useState(false);
@@ -70,7 +70,7 @@ export const ContactsPage = () => {
         ...(search.trim() ? [{ key: 'search', label: `Search: "${search.trim()}"`, onRemove: () => setSearch('') }] : []),
         ...(companyFilter ? [{ 
             key: 'company', 
-            label: `Company: ${companies.find((c) => c._id === companyFilter)?.name || 'Selected'}`, 
+            label: `Company: ${companies.find((c: { _id: string; name: string }) => c._id === companyFilter)?.name || 'Selected'}`, 
             onRemove: () => setCompanyFilter('') 
         }] : []),
         ...(statusFilter ? [{ key: 'status', label: `Status: ${statusFilter}`, onRemove: () => setStatusFilter('') }] : []),
@@ -102,12 +102,12 @@ export const ContactsPage = () => {
         dispatch(fetchContacts({ page: currentPage, limit: 20, search, companyId: companyFilter, status: statusFilter, sortBy: 'createdAt', sortOrder }));
     };
 
-    const activeContacts = contacts.filter((contact) => contact.status === 'Active').length;
-    const primaryContacts = contacts.filter((contact) => contact.isPrimary).length;
+    const activeContacts = contacts.filter((contact: ContactRecord) => contact.status === 'Active').length;
+    const primaryContacts = contacts.filter((contact: ContactRecord) => contact.isPrimary).length;
     const companyCoverage = useMemo(
         () => new Set(
             contacts
-                .map((contact) => typeof contact.companyId === 'string' ? contact.companyId : contact.companyId?._id)
+                .map((contact: ContactRecord) => typeof contact.companyId === 'string' ? contact.companyId : contact.companyId?._id)
                 .filter(Boolean)
         ).size,
         [contacts]
@@ -267,7 +267,7 @@ export const ContactsPage = () => {
                                 onChange={(e) => setCompanyFilter(e.target.value)}
                             >
                                 <option value="">All companies</option>
-                                {companies.map((company) => (
+                                {companies.map((company: { _id: string; name: string }) => (
                                     <option key={company._id} value={company._id}>{company.name}</option>
                                 ))}
                             </select>
@@ -294,7 +294,7 @@ export const ContactsPage = () => {
                     onChange={(e) => setCompanyFilter(e.target.value)}
                 >
                     <option value="">All companies</option>
-                    {companies.map((company) => (
+                    {companies.map((company: { _id: string; name: string }) => (
                         <option key={company._id} value={company._id}>{company.name}</option>
                     ))}
                 </select>
@@ -348,7 +348,7 @@ export const ContactsPage = () => {
                     </button>
                 }
                 page={safePagination.page}
-                totalPages={safePagination.pages}
+                totalPages={safePagination.totalPages}
                 totalItems={safePagination.total}
                 onPageChange={(nextPage) => setCurrentPage(nextPage)}
                 onRowClick={(contact) => handleEdit(contact)}
@@ -374,3 +374,4 @@ export const ContactsPage = () => {
 };
 
 export default ContactsPage;
+

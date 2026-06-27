@@ -1,19 +1,17 @@
-import { Link } from 'react-router-dom';
-import { ROUTES } from '../../routes';
+import AuthShell from '../../components/auth/AuthShell';
+import InlineAlert from '../../components/ui/InlineAlert';
 
 const ContactAdminPage = () => {
     return (
-        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
-            <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl shadow-sm p-8 space-y-4">
-                <h1 className="text-2xl font-bold text-slate-900">Contact Ops</h1>
-                <p className="text-sm text-slate-600">
-                    Access is provisioned by your operations/admin team. Please reach out internally to request an account.
-                </p>
-                <Link to={ROUTES.login} className="inline-flex text-sm font-semibold text-primary-500 hover:text-primary-400">
-                    Back to login
-                </Link>
-            </div>
-        </div>
+        <AuthShell
+            eyebrow="Access Provisioning"
+            title="Request workspace access"
+            description="ThinkTanker accounts are provisioned by your internal admin or operations team to keep tenant and role access controlled."
+        >
+            <InlineAlert tone="muted" title="Provisioning note">
+                Contact your internal operations or admin team to request a new account, role change, or access approval.
+            </InlineAlert>
+        </AuthShell>
     );
 };
 

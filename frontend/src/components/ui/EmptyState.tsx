@@ -11,9 +11,9 @@ interface EmptyStateProps {
 
 const EmptyState = ({ icon, title, description, action, className }: EmptyStateProps) => {
     return (
-        <div className={cn('empty-state rounded-[28px] border border-dashed border-slate-200 bg-slate-50/70 px-6 py-12', className)}>
+        <div className={cn('empty-state rounded-[28px] border border-dashed border-slate-200 bg-[#fbf2e7]/85 px-6 py-12', className)}>
             {icon && (
-                <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-[22px] border border-slate-200 bg-white text-slate-400 shadow-[0_10px_24px_rgba(15,23,42,0.05)]">
+                <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-[22px] border border-slate-200 bg-[#fffdf9] text-slate-400 shadow-[0_10px_24px_rgba(120,74,24,0.05)]">
                     {icon}
                 </div>
             )}

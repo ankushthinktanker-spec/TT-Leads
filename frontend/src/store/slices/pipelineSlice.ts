@@ -29,7 +29,7 @@ interface PipelineState {
     pagination: {
         page: number;
         limit: number;
-        totalItems: number;
+        total: number;
         totalPages: number;
     };
 }
@@ -41,7 +41,7 @@ const initialState: PipelineState = {
     pagination: {
         page: 1,
         limit: 10,
-        totalItems: 0,
+        total: 0,
         totalPages: 0
     }
 };
@@ -164,13 +164,13 @@ const pipelineSlice = createSlice({
             .addCase(fetchPipelines.fulfilled, (state, action) => {
                 state.loading = false;
                 const data = action.payload?.data || {};
-                const meta = data.meta || action.payload?.pagination || {};
-                state.pipelines = data.items || data.pipelines || [];
+                const meta = data.meta || {};
+                state.pipelines = data.data || [];
                 state.pagination = {
                     page: meta.page || 1,
                     limit: meta.limit || 10,
-                    totalItems: meta.totalItems || meta.total || 0,
-                    totalPages: meta.totalPages || meta.pages || 0
+                    total: meta.total || 0,
+                    totalPages: meta.totalPages || 0
                 };
             })
             .addCase(fetchPipelines.rejected, (state, action) => {

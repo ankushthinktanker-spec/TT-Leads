@@ -27,7 +27,7 @@ const contractSchema = new Schema<IContract>(
             ref: 'Tenant',
             required: [true, 'Tenant ID is strongly required for contract isolation']
         },
-        contractNumber: { type: String, required: true, trim: true, unique: true },
+        contractNumber: { type: String, required: true, trim: true },
         title: { type: String, trim: true },
         companyId: { type: Schema.Types.ObjectId, ref: 'Company', required: true },
         dealId: { type: Schema.Types.ObjectId, ref: 'Deal' },
@@ -45,6 +45,7 @@ const contractSchema = new Schema<IContract>(
     { timestamps: true }
 );
 
+contractSchema.index({ tenantId: 1, contractNumber: 1 }, { unique: true });
 contractSchema.index({ tenantId: 1, companyId: 1, status: 1 });
 contractSchema.index({ tenantId: 1, ownerId: 1, createdAt: -1 });
 

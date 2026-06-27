@@ -1,6 +1,6 @@
 import { ReactNode } from 'react';
 
-export type SummaryCardVariant = 'primary' | 'success' | 'warning' | 'danger' | 'purple' | 'info';
+export type SummaryCardVariant = 'primary' | 'success' | 'warning' | 'danger' | 'purple' | 'info' | 'neutral';
 
 export interface SummaryCardItem {
     label: string;

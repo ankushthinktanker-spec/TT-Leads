@@ -1,67 +1,61 @@
 import { Response, NextFunction } from 'express';
-import Lead, { ILead } from '../models/lead.model';
-import User from '../models/user.model';
+import Lead from '../models/lead.model';
+import User, { IUser } from '../models/user.model';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth.middleware';
+import { Roles } from '../constants/roles';
+import { getPaginationParams, buildPaginationMeta } from '../utils/pagination';
 import { createLeadSchema, updateLeadSchema, updateLeadStatusSchema, assignLeadSchema } from '../validators/lead.validator';
-import mongoose, { FilterQuery } from 'mongoose';
+import mongoose from 'mongoose';
 import { leadRepository } from '../repositories/lead.repository';
 import LeadStageHistory from '../models/lead-stage-history.model';
 import LeadActivity from '../models/lead-activity.model';
-import Activity from '../models/activity.model';
 import { queue } from '../services/queue.service';
 import { JobType } from '../jobs/job.types';
 import { writeAuditLog } from '../services/audit.service';
+import { escapeRegex } from '../utils/regex.utils';
+import { LeadAssignmentService, enrichLeadData } from '../services/lead-assignment.service';
+import { applyOrFilter, LeadFilter } from '../utils/ownerFilters';
 
-/**
- * Utility to calculate lead health based on follow-up dates
- */
-const getLeadHealth = (nextFollowUpDate?: Date): string => {
-    if (!nextFollowUpDate) return 'Cold';
-    const now = new Date();
-    const followUp = new Date(nextFollowUpDate);
-    const diffDays = (followUp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
+interface PopulatedUser {
+    _id: mongoose.Types.ObjectId;
+    firstName: string;
+    lastName: string;
+    email: string;
+}
 
-    if (diffDays < 0) return 'Overdue';
-    if (diffDays <= 2) return 'Hot';
-    if (diffDays <= 7) return 'Warm';
-    return 'Cold';
-};
-
-interface LeadPlain extends Record<string, any> {
+interface LeadPlain extends Record<string, unknown> {
     _id: mongoose.Types.ObjectId;
     firstName: string;
     lastName: string;
     email: string;
     phone: string;
     company: string;
+    companyName?: string;
     status: string;
     priority: string;
     source: string;
-    assignedTo?: any;
-    ownerId?: any;
+    assignedTo?: mongoose.Types.ObjectId | PopulatedUser | null;
+    ownerId?: mongoose.Types.ObjectId | PopulatedUser | null;
     createdBy: mongoose.Types.ObjectId;
+    createdAt?: Date;
+    lastStageChangedAt?: Date | null;
     nextFollowUpDate?: Date;
     leadHealth?: string;
 }
 
-type LeadFilter = FilterQuery<ILead> & {
-    $or?: any[];
-};
+const toAuditChanges = (value: { toObject: () => Record<string, unknown> }): Record<string, unknown> => value.toObject();
 
-const applyOrFilter = (filter: LeadFilter, conditions: any[]) => {
-    if (!filter.$or) filter.$or = [];
-    filter.$or.push(...conditions);
-};
+const getUserTeamId = (user: Pick<IUser, 'teamId'>): mongoose.Types.ObjectId | undefined => user.teamId;
 
-const mapFollowUpTypeToActivity = (type?: string): 'Call' | 'Meeting' | 'Email' | 'WhatsApp' | 'Note' => {
-    if (!type) return 'Call';
-    const t = type.toLowerCase();
-    if (t.includes('call')) return 'Call';
-    if (t.includes('meeting')) return 'Meeting';
-    if (t.includes('email')) return 'Email';
-    if (t.includes('whatsapp')) return 'WhatsApp';
-    return 'Note';
+const getPopulatedUser = (
+    user: mongoose.Types.ObjectId | PopulatedUser | null | undefined
+): PopulatedUser | null => {
+    if (!user || user instanceof mongoose.Types.ObjectId) {
+        return null;
+    }
+
+    return user;
 };
 
 // @desc    Get all leads
@@ -74,8 +68,6 @@ export const getLeads = async (
 ): Promise<void> => {
     try {
         const {
-            page = 1,
-            limit = 10,
             status,
             priority,
             source,
@@ -92,7 +84,7 @@ export const getLeads = async (
         const filter: LeadFilter = { tenantId: req.tenantId! };
 
         // RBAC constraints on visibility
-        if (req.user!.role === 'BDM' || req.user!.role === 'User') {
+        if (req.user!.role === Roles.BDM || req.user!.role === Roles.USER) {
             filter.assignedTo = req.user!._id;
         } else if (assignedTo) {
             filter.assignedTo = assignedTo;
@@ -105,7 +97,7 @@ export const getLeads = async (
 
         // Date range filter
         if (startDate || endDate) {
-            const dateFilter: any = {};
+            const dateFilter: { $gte?: Date; $lte?: Date } = {};
             if (startDate) dateFilter.$gte = new Date(startDate as string);
             if (endDate) dateFilter.$lte = new Date(endDate as string);
             filter.createdAt = dateFilter;
@@ -113,7 +105,7 @@ export const getLeads = async (
 
         // Search filter
         if (search) {
-            const searchRegex = new RegExp(search as string, 'i');
+            const searchRegex = new RegExp(escapeRegex(search as string), 'i');
             applyOrFilter(filter, [
                 { firstName: searchRegex },
                 { lastName: searchRegex },
@@ -123,7 +115,7 @@ export const getLeads = async (
         }
 
         // Pagination
-        const skip = (Number(page) - 1) * Number(limit);
+        const { page, limit, skip } = getPaginationParams(req.query as Record<string, unknown>);
         const sort: Record<string, 1 | -1> = {};
         sort[sortBy as string] = sortOrder === 'asc' ? 1 : -1;
 
@@ -133,27 +125,17 @@ export const getLeads = async (
             .populate('createdBy', 'firstName lastName email')
             .sort(sort)
             .skip(skip)
-            .limit(Number(limit));
+            .limit(limit);
 
-        const total = await Lead.countDocuments(filter);
+        const total = await leadRepository.count(req.tenantId!, filter);
 
-        const leadsWithHealth = leads.map((lead) => {
-            const leadData = lead.toObject() as LeadPlain;
-            leadData.leadHealth = getLeadHealth(leadData.nextFollowUpDate);
-            leadData.ownerId = leadData.ownerId || leadData.assignedTo || leadData.createdBy;
-            return leadData;
-        });
+        const leadsWithHealth = leads.map((lead) => enrichLeadData(lead));
 
         res.status(200).json({
             success: true,
             data: {
-                leads: leadsWithHealth,
-                pagination: {
-                    page: Number(page),
-                    limit: Number(limit),
-                    total,
-                    pages: Math.ceil(total / Number(limit))
-                }
+                data: leadsWithHealth,
+                meta: buildPaginationMeta(page, limit, total)
             }
         });
     } catch (error) {
@@ -174,24 +156,25 @@ export const getLead = async (
             throw new AppError('Invalid lead identifier', 400);
         }
 
-        const lead = await Lead.findOne({ _id: req.params.id, tenantId: req.tenantId! })
-            .populate('assignedTo', 'firstName lastName email avatar status leadsAssigned')
-            .populate('ownerId', 'firstName lastName email')
-            .populate('createdBy', 'firstName lastName email')
-            .populate('teamId', 'name');
+        const lead = await leadRepository.findById(req.tenantId!, req.params.id, {
+            populate: [
+                { path: 'assignedTo', select: 'firstName lastName email avatar status leadsAssigned' },
+                { path: 'ownerId', select: 'firstName lastName email' },
+                { path: 'createdBy', select: 'firstName lastName email' },
+                { path: 'teamId', select: 'name' }
+            ]
+        });
 
         if (!lead) {
             throw new AppError('Lead not found or unauthorized access', 404);
         }
 
         // Check access
-        if ((req.user!.role === 'BDM' || req.user!.role === 'User') && lead.assignedTo?.toString() !== req.user!._id.toString()) {
+        if ((req.user!.role === Roles.BDM || req.user!.role === Roles.USER) && lead.assignedTo?.toString() !== req.user!._id.toString()) {
             throw new AppError('Not authorized to view this lead', 403);
         }
 
-        const leadData = lead.toObject() as LeadPlain;
-        leadData.leadHealth = getLeadHealth(leadData.nextFollowUpDate);
-        leadData.ownerId = leadData.ownerId || leadData.assignedTo || leadData.createdBy;
+        const leadData = enrichLeadData(lead);
 
         res.status(200).json({
             success: true,
@@ -212,16 +195,16 @@ export const createLead = async (
 ): Promise<void> => {
     try {
         // Validate request body
-        const { error, value } = createLeadSchema.validate(req.body);
+        const { error, value } = createLeadSchema.validate(req.body, { stripUnknown: true });
         if (error) {
             throw new AppError(error.details[0].message, 400);
         }
 
-        // Check for duplicate email or phone - Multi-Tenant safe check
-        const existingLead = await Lead.findOne({
-            tenantId: req.tenantId!,
-            $or: [{ email: value.email }, { phone: value.phone }]
-        });
+        // Check for duplicate email or phone via repository (tenant-scoped)
+        const existingLead = await leadRepository.exists(
+            req.tenantId!,
+            { $or: [{ email: value.email }, { phone: value.phone }] }
+        );
 
         if (existingLead) {
             throw new AppError('Lead with this email or phone already exists in your organization', 400);
@@ -244,7 +227,7 @@ export const createLead = async (
             if (!assignedUser) {
                 throw new AppError('Assigned user not found in your organization', 404);
             }
-            teamId = (assignedUser as any).teamId;
+            teamId = getUserTeamId(assignedUser);
         }
 
         // Create lead via Multi-Tenant safe repository
@@ -257,7 +240,7 @@ export const createLead = async (
             createdBy: req.user!._id
         });
 
-        // 📍 Notification Queue
+        // Notification Queue
         if (assignedTo && value.email) {
             queue.enqueue(JobType.SEND_EMAIL, {
                 to: value.email,
@@ -275,7 +258,7 @@ export const createLead = async (
             );
         }
 
-        // 📍 SECURITY: Audit Log Creation
+        // SECURITY: Audit Log Creation
         await writeAuditLog({
             tenantId: req.tenantId!,
             actorId: req.user!._id.toString(),
@@ -283,11 +266,10 @@ export const createLead = async (
             entityType: 'Lead',
             entityId: lead._id.toString(),
             ip: req.ip,
-            changes: lead.toObject() as any
+            changes: toAuditChanges(lead)
         });
 
-        const leadData = lead.toObject() as LeadPlain;
-        leadData.leadHealth = getLeadHealth(leadData.nextFollowUpDate);
+        const leadData = enrichLeadData(lead);
 
         res.status(201).json({
             success: true,
@@ -312,18 +294,18 @@ export const updateLead = async (
             throw new AppError('Invalid lead identifier', 400);
         }
 
-        const { error, value } = updateLeadSchema.validate(req.body);
+        const { error, value } = updateLeadSchema.validate(req.body, { stripUnknown: true });
         if (error) {
             throw new AppError(error.details[0].message, 400);
         }
 
-        const lead = await Lead.findOne({ _id: req.params.id, tenantId: req.tenantId! });
+        const lead = await leadRepository.findById(req.tenantId!, req.params.id);
         if (!lead) {
             throw new AppError('Lead not found or unauthorized access', 404);
         }
 
         // Check access
-        if ((req.user!.role === 'BDM' || req.user!.role === 'User') && lead.assignedTo?.toString() !== req.user!._id.toString()) {
+        if ((req.user!.role === Roles.BDM || req.user!.role === Roles.USER) && lead.assignedTo?.toString() !== req.user!._id.toString()) {
             throw new AppError('Not authorized to update this lead', 403);
         }
 
@@ -351,50 +333,24 @@ export const updateLead = async (
         }
 
         if (Object.prototype.hasOwnProperty.call(updateValue, 'assignedTo')) {
-            const newAssignedTo = updateValue.assignedTo;
-            const previousAssignedTo = lead.assignedTo?.toString();
-
-            if (!newAssignedTo) {
-                if (previousAssignedTo) {
-                    await User.findOneAndUpdate(
-                        { _id: previousAssignedTo, tenantId: req.tenantId! },
-                        { $inc: { leadsAssigned: -1 } }
-                    );
-                }
-                update.$set.teamId = null;
-            } else if (newAssignedTo.toString() !== previousAssignedTo) {
-                const assignedUser = await User.findOne({ _id: newAssignedTo, tenantId: req.tenantId! });
-                if (!assignedUser) {
-                    throw new AppError('Assigned user not found in your organization', 404);
-                }
-
-                if (previousAssignedTo) {
-                    await User.findOneAndUpdate(
-                        { _id: previousAssignedTo, tenantId: req.tenantId! },
-                        { $inc: { leadsAssigned: -1 } }
-                    );
-                }
-
-                await User.findOneAndUpdate(
-                    { _id: newAssignedTo, tenantId: req.tenantId! },
-                    { $inc: { leadsAssigned: 1 } }
-                );
-                update.$set.teamId = (assignedUser as any).teamId;
-            }
+            await LeadAssignmentService.handleAssignmentChange({
+                newAssignedTo: updateValue.assignedTo,
+                previousAssignedTo: lead.assignedTo?.toString(),
+                tenantId: req.tenantId!,
+                update
+            });
         }
 
-        // Update lead securely
-        const updatedLead = await Lead.findOneAndUpdate(
-            { _id: req.params.id, tenantId: req.tenantId! },
-            update,
-            { new: true, runValidators: true }
-        ).populate('assignedTo', 'firstName lastName email');
+        // Update lead via repository (tenant-scoped)
+        const updatedLead = await leadRepository.updateById(req.tenantId!, req.params.id, update, {
+            populate: [{ path: 'assignedTo', select: 'firstName lastName email' }]
+        });
 
         if (!updatedLead) {
             throw new AppError('Update failed: Lead not found', 404);
         }
 
-        // 📍 SECURITY: Audit Log Update
+        // SECURITY: Audit Log Update
         await writeAuditLog({
             tenantId: req.tenantId!,
             actorId: req.user!._id.toString(),
@@ -402,12 +358,10 @@ export const updateLead = async (
             entityType: 'Lead',
             entityId: updatedLead._id.toString(),
             ip: req.ip,
-            changes: { before: lead.toObject() as any, after: updatedLead.toObject() as any }
+            changes: { before: toAuditChanges(lead), after: toAuditChanges(updatedLead) }
         });
 
-        const updatedLeadData = updatedLead.toObject() as LeadPlain;
-        updatedLeadData.leadHealth = getLeadHealth(updatedLeadData.nextFollowUpDate);
-        updatedLeadData.ownerId = updatedLeadData.ownerId || updatedLeadData.assignedTo || updatedLeadData.createdBy;
+        const updatedLeadData = enrichLeadData(updatedLead);
 
         const nextFollowUpIso = updatedLead.nextFollowUpDate ? updatedLead.nextFollowUpDate.toISOString() : null;
         const nextFollowUpType = updatedLead.followUpType || null;
@@ -465,12 +419,12 @@ export const deleteLead = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        const lead = await Lead.findOne({ _id: req.params.id, tenantId: req.tenantId! });
+        const lead = await leadRepository.findById(req.tenantId!, req.params.id);
         if (!lead) {
             throw new AppError('Lead not found or unauthorized access', 404);
         }
 
-        // 📍 SECURITY: Audit Log Delete
+        // SECURITY: Audit Log Delete
         await writeAuditLog({
             tenantId: req.tenantId!,
             actorId: req.user!._id.toString(),
@@ -478,10 +432,10 @@ export const deleteLead = async (
             entityType: 'Lead',
             entityId: lead._id.toString(),
             ip: req.ip,
-            changes: lead.toObject() as any
+            changes: toAuditChanges(lead)
         });
 
-        await lead.deleteOne();
+        await leadRepository.deleteById(req.tenantId!, req.params.id);
 
         res.status(200).json({
             success: true,
@@ -501,80 +455,30 @@ export const updateLeadStatus = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        // Validate request body
-        const { error, value } = updateLeadStatusSchema.validate(req.body);
+        const { error, value } = updateLeadStatusSchema.validate(req.body, { stripUnknown: true });
         if (error) {
             throw new AppError(error.details[0].message, 400);
         }
 
-        const lead = await Lead.findOne({ _id: req.params.id, tenantId: req.tenantId! });
+        const lead = await leadRepository.findById(req.tenantId!, req.params.id);
         if (!lead) {
             throw new AppError('Lead not found or unauthorized access', 404);
         }
 
         // Check access
-        if ((req.user!.role === 'BDM' || req.user!.role === 'User') && lead.assignedTo?.toString() !== req.user!._id.toString()) {
+        if ((req.user!.role === Roles.BDM || req.user!.role === Roles.USER) && lead.assignedTo?.toString() !== req.user!._id.toString()) {
             throw new AppError('Not authorized to update this lead', 403);
         }
 
-        const previousStatus = lead.status;
-        const previousLeadState = lead.toObject();
-        lead.status = value.status;
-        if (previousStatus !== value.status) {
-            lead.lastStageChangedAt = new Date();
-        }
-        if (value.status === 'Won' && previousStatus !== 'Won') {
-            lead.convertedAt = new Date();
-            lead.closedAt = new Date();
-            // Update user stats safely
-            if (lead.assignedTo) {
-                await User.findOneAndUpdate(
-                    { _id: lead.assignedTo, tenantId: req.tenantId! },
-                    { $inc: { leadsConverted: 1, totalRevenue: lead.dealValue || 0 } }
-                );
-            }
-        } else if (value.status === 'Lost') {
-            lead.closedAt = new Date();
-            lead.lostReason = value.lostReason;
-        } else {
-            lead.lostReason = undefined;
-        }
-
-        await lead.save();
-
-        if (previousStatus !== value.status) {
-            await LeadStageHistory.create({
-                tenantId: req.tenantId!,
-                leadId: lead._id,
-                fromStatus: previousStatus,
-                toStatus: value.status,
-                changedBy: req.user!._id,
-                changedAt: new Date()
-            });
-            await LeadActivity.create({
-                tenantId: req.tenantId!,
-                leadId: lead._id,
-                type: 'STAGE_CHANGE',
-                message: `Stage changed from ${previousStatus} to ${value.status}`,
-                meta: { oldStage: previousStatus, newStage: value.status },
-                createdBy: req.user!._id
-            });
-        }
-
-        // 📍 SECURITY: Audit Log Status Update
-        await writeAuditLog({
+        const leadData = await LeadAssignmentService.transitionStatus({
+            leadId: req.params.id,
             tenantId: req.tenantId!,
             actorId: req.user!._id.toString(),
-            action: 'STATUS_UPDATE',
-            entityType: 'Lead',
-            entityId: lead._id.toString(),
+            userId: req.user!._id,
             ip: req.ip,
-            changes: { from: previousStatus, to: value.status, previousLead: previousLeadState as any }
+            newStatus: value.status,
+            lostReason: value.lostReason
         });
-
-        const leadData = lead.toObject() as LeadPlain;
-        leadData.leadHealth = getLeadHealth(leadData.nextFollowUpDate);
-        leadData.ownerId = leadData.ownerId || leadData.assignedTo || leadData.createdBy;
 
         res.status(200).json({
             success: true,
@@ -595,53 +499,17 @@ export const assignLead = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        // Validate request body
-        const { error, value } = assignLeadSchema.validate(req.body);
+        const { error, value } = assignLeadSchema.validate(req.body, { stripUnknown: true });
         if (error) {
             throw new AppError(error.details[0].message, 400);
         }
 
-        const lead = await Lead.findOne({ _id: req.params.id, tenantId: req.tenantId! });
-        if (!lead) {
-            throw new AppError('Lead not found or unauthorized access', 404);
-        }
-
-        // Check if user exists within tenant boundary
-        const user = await User.findOne({ _id: value.assignedTo, tenantId: req.tenantId! });
-        if (!user) {
-            throw new AppError('User not found in your organization', 404);
-        }
-
-        const previousAssignedTo = lead.assignedTo;
-
-        // Update previous assignee stats safely
-        if (previousAssignedTo) {
-            await User.findOneAndUpdate(
-                { _id: previousAssignedTo, tenantId: req.tenantId! },
-                { $inc: { leadsAssigned: -1 } }
-            );
-        }
-
-        // Update new assignee stats safely
-        await User.findOneAndUpdate(
-            { _id: value.assignedTo, tenantId: req.tenantId! },
-            { $inc: { leadsAssigned: 1 } }
-        );
-
-        // Update lead
-        lead.assignedTo = value.assignedTo;
-        lead.teamId = (user as any).teamId;
-        await lead.save();
-
-        // 📍 SECURITY: Audit Log Assignment
-        await writeAuditLog({
+        const lead = await LeadAssignmentService.assignLead({
+            leadId: req.params.id,
+            assignedTo: value.assignedTo,
             tenantId: req.tenantId!,
             actorId: req.user!._id.toString(),
-            action: 'ASSIGN',
-            entityType: 'Lead',
-            entityId: lead._id.toString(),
-            ip: req.ip,
-            changes: { from: previousAssignedTo as any, to: value.assignedTo }
+            ip: req.ip
         });
 
         res.status(200).json({
@@ -663,9 +531,11 @@ export const getMyLeads = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        const leads = await Lead.find({ assignedTo: req.user!._id, tenantId: req.tenantId! })
-            .populate('createdBy', 'firstName lastName email')
-            .sort({ createdAt: -1 });
+        const leads = await leadRepository.find(req.tenantId!, { assignedTo: req.user!._id }, {
+            populate: [{ path: 'createdBy', select: 'firstName lastName email' }],
+            sort: { createdAt: -1 },
+            lean: true
+        });
 
         res.status(200).json({
             success: true,
@@ -689,100 +559,28 @@ export const updateLeadFollowUp = async (
             throw new AppError('Invalid lead identifier', 400);
         }
 
-        const lead = await Lead.findOne({ _id: req.params.id, tenantId: req.tenantId! });
+        // Access check before delegating to service
+        const lead = await leadRepository.findById(req.tenantId!, req.params.id);
         if (!lead) {
             throw new AppError('Lead not found or unauthorized access', 404);
         }
 
-        if ((req.user!.role === 'BDM' || req.user!.role === 'User') && lead.assignedTo?.toString() !== req.user!._id.toString()) {
+        if ((req.user!.role === Roles.BDM || req.user!.role === Roles.USER) && lead.assignedTo?.toString() !== req.user!._id.toString()) {
             throw new AppError('Not authorized to update this lead', 403);
         }
 
-        const nextFollowUpDate = req.body.nextFollowUpAt || req.body.nextFollowUpDate;
-        const followUpType = req.body.followUpType;
-        const note = req.body.note;
-        const action = req.body.action || 'reschedule';
-
-        const previousFollowUp = lead.nextFollowUpDate;
-
-        if (nextFollowUpDate) {
-            lead.nextFollowUpDate = new Date(nextFollowUpDate);
-        } else if (req.body.clearFollowUp || action === 'done') {
-            lead.nextFollowUpDate = undefined;
-        }
-
-        if (followUpType) {
-            lead.followUpType = followUpType;
-        }
-
-        if (!lead.ownerId) {
-            lead.ownerId = lead.assignedTo || lead.createdBy;
-        }
-
-        if (action === 'reschedule' && !nextFollowUpDate) {
-            throw new AppError('Next follow-up date is required', 400);
-        }
-
-        if (action === 'done') {
-            lead.lastContactedDate = new Date();
-            lead.followUpCount = (lead.followUpCount || 0) + 1;
-        }
-
-        await lead.save();
-
-        if (note || action === 'done' || action === 'reschedule') {
-            const activityType = mapFollowUpTypeToActivity(followUpType);
-            const subject = action === 'done'
-                ? 'Follow-up completed'
-                : action === 'reschedule'
-                    ? 'Follow-up rescheduled'
-                    : 'Follow-up updated';
-            
-            await Activity.create({
-                tenantId: req.tenantId!,
-                activityType,
-                relatedTo: { model: 'Lead', id: lead._id },
-                subject,
-                description: note,
-                activityDate: new Date(),
-                nextFollowUpDate: lead.nextFollowUpDate,
-                createdBy: req.user!._id
-            });
-
-            await LeadActivity.create({
-                tenantId: req.tenantId!,
-                leadId: lead._id,
-                type: action === 'done' ? 'FOLLOWUP_COMPLETED' : 'FOLLOWUP_SCHEDULED',
-                message: note?.trim() || subject,
-                meta: {
-                    followUpType: followUpType || null,
-                    followUpAt: lead.nextFollowUpDate || null,
-                    action
-                },
-                createdBy: req.user!._id
-            });
-
-            lead.lastActivityAt = new Date();
-            if (!lead.firstResponseAt) {
-                lead.firstResponseAt = new Date();
-            }
-            await lead.save();
-        }
-
-        // 📍 SECURITY: Audit Log Follow-up Update
-        await writeAuditLog({
+        const leadData = await LeadAssignmentService.updateFollowUp({
+            leadId: req.params.id,
             tenantId: req.tenantId!,
             actorId: req.user!._id.toString(),
-            action: 'FOLLOWUP_UPDATE',
-            entityType: 'Lead',
-            entityId: lead._id.toString(),
+            userId: req.user!._id,
             ip: req.ip,
-            changes: { from: previousFollowUp as any, to: lead.nextFollowUpDate, action }
+            nextFollowUpDate: req.body.nextFollowUpAt || req.body.nextFollowUpDate,
+            followUpType: req.body.followUpType,
+            note: req.body.note,
+            action: req.body.action || 'reschedule',
+            clearFollowUp: req.body.clearFollowUp
         });
-
-        const leadData = lead.toObject() as LeadPlain;
-        leadData.leadHealth = getLeadHealth(leadData.nextFollowUpDate);
-        leadData.ownerId = leadData.ownerId || leadData.assignedTo || leadData.createdBy;
 
         res.status(200).json({
             success: true,
@@ -807,12 +605,12 @@ export const addLeadNote = async (
             throw new AppError('Invalid lead identifier', 400);
         }
 
-        const lead = await Lead.findOne({ _id: req.params.id, tenantId: req.tenantId! });
+        const lead = await leadRepository.findById(req.tenantId!, req.params.id);
         if (!lead) {
             throw new AppError('Lead not found or unauthorized access', 404);
         }
 
-        if ((req.user!.role === 'BDM' || req.user!.role === 'User') && lead.assignedTo?.toString() !== req.user!._id.toString()) {
+        if ((req.user!.role === Roles.BDM || req.user!.role === Roles.USER) && lead.assignedTo?.toString() !== req.user!._id.toString()) {
             throw new AppError('Not authorized to update this lead', 403);
         }
 
@@ -821,48 +619,19 @@ export const addLeadNote = async (
             throw new AppError('Note is required', 400);
         }
 
-        const activity = await Activity.create({
-            tenantId: req.tenantId!,
-            activityType: 'Note',
-            relatedTo: { model: 'Lead', id: lead._id },
-            subject: 'Lead note',
-            description: note.trim(),
-            activityDate: new Date(),
-            createdBy: req.user!._id
-        });
-
-        await LeadActivity.create({
-            tenantId: req.tenantId!,
-            leadId: lead._id,
-            type: 'NOTE',
-            message: note.trim(),
-            createdBy: req.user!._id
-        });
-
-        lead.lastActivityAt = new Date();
-        if (!lead.firstResponseAt) {
-            lead.firstResponseAt = new Date();
-        }
-        if (!lead.ownerId) {
-            lead.ownerId = lead.assignedTo || lead.createdBy;
-        }
-        await lead.save();
-
-        // 📍 SECURITY: Audit Log Note creation
-        await writeAuditLog({
+        const activityId = await LeadAssignmentService.addNote({
+            leadId: req.params.id,
             tenantId: req.tenantId!,
             actorId: req.user!._id.toString(),
-            action: 'NOTE_ADD',
-            entityType: 'Lead',
-            entityId: lead._id.toString(),
+            userId: req.user!._id,
             ip: req.ip,
-            changes: { note: note.trim() }
+            note: note.trim()
         });
 
         res.status(201).json({
             success: true,
             message: 'Note added successfully',
-            data: { activityId: activity._id }
+            data: { activityId }
         });
     } catch (error) {
         next(error);
@@ -900,9 +669,9 @@ export const getStuckLeads = async (
             if (targetUser) {
                 applyOrFilter(filter, [{ ownerId }, { assignedTo: ownerId }]);
             }
-        } else if (req.user!.role === 'BDM' || req.user!.role === 'User') {
+        } else if (req.user!.role === Roles.BDM || req.user!.role === Roles.USER) {
             filter.assignedTo = req.user!._id;
-        } else if (req.user!.role === 'Manager' && req.user!.teamId) {
+        } else if (req.user!.role === Roles.MANAGER && req.user!.teamId) {
             const teamMembers = await User.find({ teamId: req.user!.teamId, tenantId: req.tenantId! }).select('_id');
             filter.assignedTo = { $in: teamMembers.map(m => m._id) };
         }
@@ -916,20 +685,19 @@ export const getStuckLeads = async (
 
         const now = Date.now();
         const data = leads.map((lead) => {
-            const doc = lead.toObject() as LeadPlain;
+            const doc = lead.toObject() as unknown as LeadPlain;
             const lastChangeDate = doc.lastStageChangedAt || doc.createdAt;
             const lastChange = lastChangeDate ? new Date(lastChangeDate).getTime() : now;
             const daysStuck = Math.floor((now - lastChange) / (1000 * 60 * 60 * 24));
-            
-            // Populate logic safety check
-            const owner = (doc.ownerId || doc.assignedTo) as any;
-            
+
+            const owner = getPopulatedUser(doc.ownerId || doc.assignedTo);
+
             return {
                 leadId: doc._id,
                 name: `${doc.firstName} ${doc.lastName}`.trim(),
-                company: (doc as any).companyName || doc.company,
+                company: doc.companyName || doc.company,
                 stage: doc.status,
-                owner: owner && typeof owner === 'object' && owner.firstName
+                owner: owner
                     ? {
                         _id: owner._id,
                         firstName: owner.firstName,

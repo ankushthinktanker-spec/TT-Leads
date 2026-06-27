@@ -1,4 +1,4 @@
-import nodemailer from 'nodemailer';
+import nodemailer, { Transporter } from 'nodemailer';
 
 type SendMailInput = {
     to: string;
@@ -23,15 +23,16 @@ const isSmtpConfigured = (): boolean => {
     return Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
 };
 
-export const sendMail = async (input: SendMailInput): Promise<void> => {
-    if (!isSmtpConfigured()) {
-        throw new Error('SMTP is not configured');
-    }
+// Module-level singleton transporter – created once on first use
+let transporter: Transporter | null = null;
+
+const getTransporter = (): Transporter => {
+    if (transporter) return transporter;
 
     const port = getSmtpPort();
     const secure = port === 465;
 
-    const transporter = nodemailer.createTransport({
+    transporter = nodemailer.createTransport({
         host: process.env.SMTP_HOST,
         port,
         secure,
@@ -41,7 +42,17 @@ export const sendMail = async (input: SendMailInput): Promise<void> => {
         }
     });
 
-    await transporter.sendMail({
+    return transporter;
+};
+
+export const sendMail = async (input: SendMailInput): Promise<void> => {
+    if (!isSmtpConfigured()) {
+        throw new Error('SMTP is not configured');
+    }
+
+    const transport = getTransporter();
+
+    await transport.sendMail({
         from: process.env.EMAIL_FROM || process.env.SMTP_USER,
         to: input.to,
         subject: input.subject,

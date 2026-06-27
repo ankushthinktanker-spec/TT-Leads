@@ -30,7 +30,7 @@ interface ContractState {
     pagination: {
         page: number;
         limit: number;
-        totalItems: number;
+        total: number;
         totalPages: number;
     };
 }
@@ -42,7 +42,7 @@ const initialState: ContractState = {
     pagination: {
         page: 1,
         limit: 10,
-        totalItems: 0,
+        total: 0,
         totalPages: 0
     }
 };
@@ -138,13 +138,13 @@ const contractSlice = createSlice({
             .addCase(fetchContracts.fulfilled, (state, action) => {
                 state.loading = false;
                 const data = action.payload?.data || {};
-                const meta = data.meta || action.payload?.pagination || {};
-                state.contracts = data.items || data.contracts || [];
+                const meta = data.meta || {};
+                state.contracts = data.data || [];
                 state.pagination = {
                     page: meta.page || 1,
                     limit: meta.limit || 10,
-                    totalItems: meta.totalItems || meta.total || 0,
-                    totalPages: meta.totalPages || meta.pages || 0
+                    total: meta.total || 0,
+                    totalPages: meta.totalPages || 0
                 };
             })
             .addCase(fetchContracts.rejected, (state, action) => {

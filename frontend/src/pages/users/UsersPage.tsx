@@ -2,29 +2,55 @@ import { useEffect, useState } from 'react';
 import { useAppDispatch, useAppSelector } from '../../hooks/redux';
 import { fetchUsers, deleteUser, User } from '../../store/slices/userSlice';
 import UserFormModal from './UserFormModal';
-import { Edit, Trash2, Shield, Users } from 'lucide-react';
-import InlineError from '../../components/ui/InlineError';
-import Badge from '../../components/ui/Badge';
+import { Edit, Trash2, Shield, Users, Plus, Inbox } from 'lucide-react';
 import api from '../../api/axios';
 import { useGlobalSearch } from '../../context/GlobalSearchContext';
-import ListPageShell from '../../components/crm/ListPageShell';
-import DataTable, { ColumnDef } from '../../components/crm/DataTable';
+import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import { showToast } from '../../utils/toast';
+import {
+    ModulePageShell,
+    ModulePageHeader,
+    ModuleToolbar,
+    ModuleFilterDropdown,
+    ModuleSummaryCards,
+    ModuleDataTable,
+    ModuleBadge,
+    ModuleRowActions,
+    type ModuleColumnDef,
+    type SummaryCardItem,
+    type ActiveFilter,
+} from '../../components/module-system';
 
 export const UsersPage = () => {
     const dispatch = useAppDispatch();
     const { users, loading, error, pagination } = useAppSelector((state) => state.users);
     const { user: currentUser } = useAppSelector((state) => state.auth);
-    const safePagination = pagination ?? { page: 1, limit: 10, total: 0, pages: 0 };
+    const safePagination = pagination ?? { page: 1, limit: 10, total: 0, totalPages: 0 };
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedUser, setSelectedUser] = useState<User | null>(null);
     const { value: searchQuery, setValue: setSearchQuery } = useGlobalSearch();
     const [roleFilter, setRoleFilter] = useState('');
     const [roles, setRoles] = useState<Array<{ _id: string; name: string }>>([]);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [deleteId, setDeleteId] = useState<string | null>(null);
+    const roleOptions = [
+        { value: '', label: 'All roles' },
+        ...roles.map((role) => ({ value: role.name, label: role.name })),
+    ];
 
     useEffect(() => {
-        dispatch(fetchUsers({ page: 1, limit: 10 }));
-    }, [dispatch]);
+        const timer = setTimeout(() => {
+            dispatch(fetchUsers({
+                page: currentPage,
+                limit: 10,
+                search: searchQuery,
+                role: roleFilter
+            }));
+        }, 300);
+
+        return () => clearTimeout(timer);
+    }, [dispatch, currentPage, searchQuery, roleFilter]);
 
     useEffect(() => {
         const loadRoles = async () => {
@@ -44,6 +70,7 @@ export const UsersPage = () => {
     }, []);
 
     const runFetch = (nextPage = 1) => {
+        setCurrentPage(nextPage);
         dispatch(fetchUsers({
             page: nextPage,
             limit: 10,
@@ -57,9 +84,21 @@ export const UsersPage = () => {
         setIsModalOpen(true);
     };
 
-    const handleDelete = async (userId: string) => {
-        if (window.confirm('Are you sure you want to delete this user?')) {
-            await dispatch(deleteUser(userId));
+    const confirmDelete = async () => {
+        if (!deleteId) return;
+        try {
+            await dispatch(deleteUser(deleteId)).unwrap();
+            setDeleteId(null);
+            showToast('User deleted successfully.', 'success');
+            runFetch(safePagination.page);
+        } catch {
+            showToast('Failed to delete user.', 'error');
+        }
+    };
+
+    const handleDelete = (userId: string) => {
+        if (currentUser?.id !== userId) {
+            setDeleteId(userId);
         }
     };
 
@@ -75,8 +114,23 @@ export const UsersPage = () => {
     const handleClearFilters = () => {
         setSearchQuery('');
         setRoleFilter('');
-        dispatch(fetchUsers({ page: 1, limit: 10 }));
+        setCurrentPage(1);
     };
+
+    const activeFilters: ActiveFilter[] = [
+        ...(searchQuery.trim() ? [{ key: 'search', label: `Search: "${searchQuery.trim()}"`, onRemove: () => setSearchQuery('') }] : []),
+        ...(roleFilter ? [{ key: 'role', label: `Role: ${roleFilter}`, onRemove: () => setRoleFilter('') }] : []),
+    ];
+
+    const activeUsers = users.filter((user) => user.status === 'Active').length;
+    const adminUsers = users.filter((user) => user.role === 'Admin').length;
+
+    const summaryCards: SummaryCardItem[] = [
+        { label: 'Total Users', value: safePagination.total || users.length, icon: <Users size={18} />, variant: 'primary' },
+        { label: 'Active', value: activeUsers, icon: <Users size={18} />, variant: 'success' },
+        { label: 'Admin Accounts', value: adminUsers, icon: <Shield size={18} />, variant: 'warning' },
+        { label: 'Visible Results', value: users.length, icon: <Users size={18} />, variant: 'info' },
+    ];
 
     const getRoleBadgeVariant = (role: string): 'neutral' | 'success' | 'warning' | 'danger' => {
         switch (role) {
@@ -87,21 +141,21 @@ export const UsersPage = () => {
         }
     };
 
-    const columns: ColumnDef<User>[] = [
+    const columns: ModuleColumnDef<User>[] = [
         {
             id: 'user',
             header: 'User',
-            className: 'w-[34%]',
+            width: '34%',
             cell: (user) => (
                 <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-sm font-black text-slate-900 shadow-[0_4px_12px_rgba(15,23,42,0.03)]">
+                    <div className="mod-table__avatar mod-table__avatar--blue">
                         {user.firstName ? user.firstName[0] : 'U'}{user.lastName ? user.lastName[0] : ''}
                     </div>
-                    <div className="min-w-0">
-                        <div className="truncate text-sm font-semibold text-slate-950">
+                    <div style={{ minWidth: 0 }}>
+                        <div className="mod-table__primary-text">
                             {user.firstName || 'Unknown'} {user.lastName || ''}
                         </div>
-                        <div className="truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+                        <div className="mod-table__secondary-text">
                             {user.email}
                         </div>
                     </div>
@@ -111,166 +165,138 @@ export const UsersPage = () => {
         {
             id: 'role',
             header: 'Role',
-            className: 'w-[14%]',
+            width: '14%',
             cell: (user) => (
-                <Badge
-                    variant={getRoleBadgeVariant(user.role)}
-                    className="px-3 py-1 text-[10px] font-bold uppercase tracking-[0.08em] shadow-none"
-                >
+                <ModuleBadge variant={getRoleBadgeVariant(user.role)}>
                     {user.role}
-                </Badge>
+                </ModuleBadge>
             )
         },
         {
             id: 'status',
             header: 'Status',
-            className: 'w-[12%]',
+            width: '12%',
             cell: (user) => (
-                <div className="flex items-center gap-2">
-                    <div className={`h-2 w-2 rounded-full ${user.status === 'Active' ? 'bg-emerald-500' : 'bg-slate-300'}`} />
-                    <span className="text-xs font-semibold uppercase tracking-tight text-slate-700">{user.status}</span>
-                </div>
+                <ModuleBadge variant={user.status === 'Active' ? 'success' : 'neutral'}>
+                    {user.status}
+                </ModuleBadge>
             )
         },
         {
             id: 'contact',
             header: 'Contact',
-            className: 'w-[18%]',
-            cell: (user) => <span className="text-sm font-medium text-slate-600">{user.phone || '-'}</span>
+            width: '18%',
+            cell: (user) => (
+                <div className="mod-table__primary-text" style={{ fontSize: 13 }}>
+                    {user.phone || '-'}
+                </div>
+            )
         },
         {
             id: 'created',
             header: 'Created',
-            className: 'w-[14%]',
+            width: '14%',
             cell: (user) => (
-                <span className="text-sm font-medium text-slate-600">
+                <div className="mod-table__primary-text" style={{ fontSize: 13, color: 'var(--mod-text-muted)' }}>
                     {user.createdAt ? new Date(user.createdAt).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : '-'}
-                </span>
+                </div>
             )
         },
         {
             id: 'actions',
-            header: 'Actions',
+            header: '',
             align: 'right',
+            width: '80px',
             cell: (user) => (
-                <div className="flex items-center justify-end gap-2">
-                    <button
-                        onClick={() => handleEdit(user)}
-                        className="icon-button"
-                        title="Edit"
-                    >
-                        <Edit size={15} />
-                    </button>
-                    {currentUser?.id !== user._id && (
-                        <button
-                            onClick={() => handleDelete(user._id)}
-                            className="icon-button text-rose-500 hover:text-rose-600"
-                            title="Delete"
-                        >
-                            <Trash2 size={15} />
-                        </button>
-                    )}
-                </div>
+                <ModuleRowActions
+                    actions={[
+                        {
+                            label: 'Edit user',
+                            icon: <Edit size={14} />,
+                            onClick: () => handleEdit(user)
+                        },
+                        ...(currentUser?.id !== user._id ? [{
+                            label: 'Delete',
+                            icon: <Trash2 size={14} />,
+                            onClick: () => handleDelete(user._id),
+                            danger: true,
+                            divider: true
+                        }] : [])
+                    ]}
+                />
             )
         }
     ];
 
     return (
-        <>
-            {error && (
-                <InlineError
-                    message={error}
-                    onRetry={() => runFetch(safePagination.page)}
-                />
-            )}
-
-            <ListPageShell
+        <ModulePageShell>
+            <ModulePageHeader
+                eyebrow="Admin / Users"
                 title="Users"
-                subtitle="Manage team access, role assignment, and account activity from one tighter permission workspace."
+                description="Manage team access, role assignment, and account activity from one tighter permission workspace."
+                actions={(
+                    <button
+                        className="mod-btn mod-btn--primary"
+                        onClick={() => setIsModalOpen(true)}
+                    >
+                        <Plus size={14} /> Add User
+                    </button>
+                )}
+            />
+
+            <ModuleSummaryCards cards={summaryCards} />
+
+            <ModuleToolbar
                 searchValue={searchQuery}
                 searchPlaceholder="Search users..."
                 onSearchChange={setSearchQuery}
-                onAdd={() => setIsModalOpen(true)}
-                addLabel="Add User"
-                actions={(
-                    <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-600">
-                        {safePagination.total || users.length} users
-                    </span>
-                )}
+                activeFilters={activeFilters}
+                onClearAllFilters={handleClearFilters}
+                totalCount={safePagination.total || users.length}
+                countLabel="users"
             >
-                <div className="grid gap-3 md:grid-cols-3">
-                    <div className="rounded-[18px] border border-slate-200 bg-white px-4 py-3 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
-                        <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Active users</div>
-                        <div className="mt-2 text-xl font-extrabold tracking-tight text-slate-950">
-                            {users.filter((user) => user.status === 'Active').length}
-                        </div>
-                    </div>
-                    <div className="rounded-[18px] border border-slate-200 bg-white px-4 py-3 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
-                        <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Admin accounts</div>
-                        <div className="mt-2 flex items-center gap-1.5 text-xl font-extrabold tracking-tight text-slate-950">
-                            <Shield size={15} className="text-amber-600" />
-                            {users.filter((user) => user.role === 'Admin').length}
-                        </div>
-                    </div>
-                    <div className="rounded-[18px] border border-slate-200 bg-white px-4 py-3 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
-                        <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Visible results</div>
-                        <div className="mt-2 flex items-center gap-1.5 text-xl font-extrabold tracking-tight text-slate-950">
-                            <Users size={15} className="text-[#335CFF]" />
-                            {users.length}
-                        </div>
-                    </div>
-                </div>
-
-                <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-3.5 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
-                    <div className="flex flex-wrap items-center gap-2">
-                        <select
-                            value={roleFilter}
-                            onChange={(e) => setRoleFilter(e.target.value)}
-                            className="ds-select min-w-[160px]"
-                        >
-                            <option value="">All roles</option>
-                            {roles.map((role) => (
-                                <option key={role._id} value={role.name}>{role.name}</option>
-                            ))}
-                        </select>
-
-                        <button
-                            type="button"
-                            onClick={() => runFetch(1)}
-                            className="btn btn-secondary h-10 px-4"
-                        >
-                            Search
-                        </button>
-
-                        <span className="ml-auto rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
-                            {users.length} visible
-                        </span>
-
-                        {(searchQuery || roleFilter) && (
-                            <button
-                                type="button"
-                                onClick={handleClearFilters}
-                                className="text-[11px] font-semibold text-slate-500 transition-colors hover:text-[#335CFF]"
-                            >
-                                Reset
-                            </button>
-                        )}
-                    </div>
-                </div>
-
-                <DataTable
-                    rows={users}
-                    columns={columns}
-                    rowKey={(user) => user._id}
-                    loading={loading}
-                    error={null}
-                    emptyMessage="Add the first team member to start managing CRM access and role assignments."
-                    page={safePagination.page}
-                    totalPages={safePagination.pages}
-                    totalItems={safePagination.total || users.length}
-                    onPageChange={(nextPage) => dispatch(fetchUsers({ page: nextPage, limit: 10, search: searchQuery, role: roleFilter }))}
+                <ModuleFilterDropdown
+                    ariaLabel="Filter users by role"
+                    value={roleFilter}
+                    options={roleOptions}
+                    onChange={setRoleFilter}
                 />
-            </ListPageShell>
+            </ModuleToolbar>
+
+            <ModuleDataTable
+                rows={users}
+                columns={columns}
+                rowKey={(user) => user._id}
+                loading={loading}
+                error={isModalOpen ? null : error}
+                tableTitle="Team Directory"
+                tableBadge={`${users.length} visible`}
+                emptyTitle="No users found"
+                emptyDescription="Add the first team member to start managing CRM access and role assignments."
+                emptyIcon={<Inbox size={28} />}
+                emptyAction={(
+                    <button
+                        className="mod-btn mod-btn--primary"
+                        onClick={() => setIsModalOpen(true)}
+                    >
+                        <Plus size={14} /> Add User
+                    </button>
+                )}
+                page={safePagination.page}
+                totalPages={safePagination.totalPages}
+                totalItems={safePagination.total || users.length}
+                onPageChange={setCurrentPage}
+                onRetry={() => runFetch(safePagination.page)}
+            />
+
+            <ConfirmDialog
+                open={!!deleteId}
+                title="Delete user"
+                message="Are you sure you want to delete this user? This action cannot be undone."
+                confirmLabel="Delete user"
+                onConfirm={confirmDelete}
+                onCancel={() => setDeleteId(null)}
+            />
 
             <UserFormModal
                 isOpen={isModalOpen}
@@ -278,7 +304,7 @@ export const UsersPage = () => {
                 user={selectedUser}
                 onSuccess={handleSuccess}
             />
-        </>
+        </ModulePageShell>
     );
 };
 

@@ -166,9 +166,9 @@ const PermissionsSettings = () => {
             {loading ? (
                 <div className="text-slate-500">Loading permissions...</div>
             ) : (
-                <div className="overflow-auto rounded-[1.5rem] border border-slate-200 bg-white/72">
+                <div className="overflow-auto rounded-[1.5rem] border border-slate-200 bg-[#fffaf4]/90">
                     <table className="min-w-full text-sm">
-                        <thead className="bg-slate-50/90 text-xs uppercase text-slate-500">
+                        <thead className="bg-[#fbf2e7]/90 text-xs uppercase text-slate-500">
                             <tr>
                                 <th className="text-left py-3 px-4">Module</th>
                                 {orderedActions.map((action) => (
@@ -180,7 +180,7 @@ const PermissionsSettings = () => {
                         </thead>
                         <tbody>
                             {orderedModules.map((moduleKey) => (
-                                <tr key={moduleKey} className="border-t border-slate-200 hover:bg-slate-50">
+                                <tr key={moduleKey} className="border-t border-slate-200 hover:bg-[#fff5eb]">
                                     <td className="py-3 px-4 text-slate-700 font-medium">
                                         {MODULE_LABELS[moduleKey] || moduleKey}
                                     </td>
@@ -192,7 +192,7 @@ const PermissionsSettings = () => {
                                                     type="checkbox"
                                                     checked={checked}
                                                     onChange={() => togglePermission(moduleKey, actionKey)}
-                                                    className="h-4 w-4 rounded border-slate-300 bg-white text-brand-500 focus:ring-brand-500/30"
+                                                    className="h-4 w-4 rounded border-slate-300 bg-[#fffdf9] text-brand-500 focus:ring-brand-500/30"
                                                 />
                                             </td>
                                         );
@@ -208,5 +208,6 @@ const PermissionsSettings = () => {
 };
 
 export default PermissionsSettings;
+
 
 

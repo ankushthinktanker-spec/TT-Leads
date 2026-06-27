@@ -13,6 +13,15 @@ dotenv.config();
 
 const MONGO_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/thinktanker-leads';
 
+// Seed passwords must come from environment; never hardcode credentials in source
+const SEED_USER_PASSWORD = process.env.SEED_USER_PASSWORD;
+const SEED_ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD;
+
+if (!SEED_USER_PASSWORD || !SEED_ADMIN_PASSWORD) {
+    console.error('ERROR: SEED_USER_PASSWORD and SEED_ADMIN_PASSWORD must be set in environment before running the seed script.');
+    process.exit(1);
+}
+
 const seedData = async () => {
     try {
         await mongoose.connect(MONGO_URI);
@@ -40,7 +49,7 @@ const seedData = async () => {
                 firstName: 'Sarah',
                 lastName: 'Manager',
                 email: 'manager@example.com',
-                password: 'Password@123',
+                password: SEED_USER_PASSWORD!,
                 role: 'Manager',
                 phone: '9876543210'
             },
@@ -48,7 +57,7 @@ const seedData = async () => {
                 firstName: 'Mike',
                 lastName: 'Sales',
                 email: 'sales@example.com',
-                password: 'Password@123',
+                password: SEED_USER_PASSWORD!,
                 role: 'BDM',
                 phone: '9876543211'
             },
@@ -56,7 +65,7 @@ const seedData = async () => {
                 firstName: 'Emma',
                 lastName: 'Rep',
                 email: 'emma@example.com',
-                password: 'Password@123',
+                password: SEED_USER_PASSWORD!,
                 role: 'BDM',
                 phone: '9876543212'
             }
@@ -69,7 +78,7 @@ const seedData = async () => {
                 firstName: 'Admin',
                 lastName: 'User',
                 email: 'admin@example.com',
-                password: 'Admin@12345',
+                password: SEED_ADMIN_PASSWORD!,
                 role: 'Admin'
             });
         }

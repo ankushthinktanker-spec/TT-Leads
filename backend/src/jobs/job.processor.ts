@@ -18,7 +18,7 @@ export class JobProcessor {
     /**
      * Entrypoint for every background worker job.
      */
-    static async handleJob<T extends JobType>(type: T, payload: JobPayload[T]): Promise<any> {
+    static async handleJob<T extends JobType>(type: T, payload: JobPayload[T]): Promise<unknown> {
         console.debug(`[Worker] Started processing job: ${type} for tenant: ${this.resolveTenantId(payload) || 'global'}`);
 
         switch (type) {

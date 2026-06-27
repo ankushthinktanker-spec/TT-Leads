@@ -318,7 +318,7 @@ const TasksPage = () => {
                         </button>
                     }
                     page={currentPage}
-                    totalPages={pagination.pages}
+                    totalPages={pagination.totalPages}
                     totalItems={pagination.total}
                     onPageChange={setCurrentPage}
                     onRowClick={(task) => handleEdit(task)}
@@ -345,3 +345,4 @@ const TasksPage = () => {
 };
 
 export default TasksPage;
+

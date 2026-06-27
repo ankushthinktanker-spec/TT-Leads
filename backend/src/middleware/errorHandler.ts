@@ -5,7 +5,25 @@ interface CustomError extends Error {
     code?: number | string;
     keyValue?: Record<string, unknown>;
     errors?: Record<string, { message?: string }>;
+    cause?: { code?: string; message?: string };
 }
+
+const isDatabaseUnavailableError = (err: CustomError): boolean => {
+    const code = typeof err.code === 'string' ? err.code : err.cause?.code;
+    const message = `${err.message || ''} ${err.cause?.message || ''}`.toLowerCase();
+
+    return [
+        'MongooseServerSelectionError',
+        'MongoServerSelectionError',
+        'MongoNetworkError',
+    ].includes(err.name) ||
+        code === 'ENOTFOUND' ||
+        code === 'ECONNREFUSED' ||
+        code === 'ETIMEDOUT' ||
+        message.includes('buffering timed out') ||
+        message.includes('server selection timed out') ||
+        message.includes('topology is closed');
+};
 
 export const errorHandler = (
     err: CustomError,
@@ -52,6 +70,12 @@ export const errorHandler = (
         statusCode = 401;
         message = 'Token expired';
         code = 'TOKEN_EXPIRED';
+    }
+
+    if (isDatabaseUnavailableError(err)) {
+        statusCode = 503;
+        message = 'Database unavailable';
+        code = 'DATABASE_UNAVAILABLE';
     }
 
     // Log error in development

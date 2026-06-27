@@ -3,6 +3,9 @@ import { AppError } from '../middleware/errorHandler';
 import { ITask } from '../models/task.model';
 import { JobType } from '../jobs/job.types';
 import { queue } from '../services/queue.service';
+import mongoose from 'mongoose';
+
+type TaskCreateInput = Omit<ITask, 'tenantId' | 'createdBy' | 'createdAt' | 'updatedAt'>;
 
 /**
  * TaskService
@@ -15,10 +18,10 @@ export class TaskService {
     /**
      * Create a new task and notify the assignee if it's high priority.
      */
-    async createTask(tenantId: string, payload: any, createdById: string): Promise<ITask> {
+    async createTask(tenantId: string, payload: Partial<TaskCreateInput>, createdById: string): Promise<ITask> {
         const task = await taskRepository.create(tenantId, {
             ...payload,
-            createdBy: createdById
+            createdBy: new mongoose.Types.ObjectId(createdById)
         });
 
         // 📍 Step 4 Architecture Integration: Offload high-priority notification to background

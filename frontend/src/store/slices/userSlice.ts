@@ -34,7 +34,7 @@ interface UserState {
         page: number;
         limit: number;
         total: number;
-        pages: number;
+        totalPages: number;
     };
 }
 
@@ -47,7 +47,7 @@ const initialState: UserState = {
         page: 1,
         limit: 10,
         total: 0,
-        pages: 0
+        totalPages: 0
     }
 };
 
@@ -131,13 +131,13 @@ const userSlice = createSlice({
             .addCase(fetchUsers.fulfilled, (state, action) => {
                 state.loading = false;
                 const data = action.payload?.data || {};
-                const meta = data.meta || action.payload?.pagination || {};
-                state.users = data.users || data.items || [];
+                const meta = data.meta || {};
+                state.users = data.data || [];
                 state.pagination = {
                     page: meta.page || 1,
                     limit: meta.limit || 10,
-                    total: meta.totalItems || meta.total || 0,
-                    pages: meta.totalPages || meta.pages || 0
+                    total: meta.total || 0,
+                    totalPages: meta.totalPages || 0
                 };
             })
             .addCase(fetchUsers.rejected, (state, action) => {

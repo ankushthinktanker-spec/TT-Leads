@@ -73,14 +73,14 @@ export const EditLeadPage = () => {
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                         <div className="max-w-3xl">
                             <button
-                                onClick={() => window.history.back()}
+                                onClick={() => navigate(lead ? `${ROUTES.leads}/${lead._id}` : ROUTES.leads)}
                                 className="mb-4 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 transition hover:text-slate-900"
                             >
                                 <ArrowLeft size={16} />
                                 Back to lead
                             </button>
                             <div className="mb-3 flex items-center gap-3">
-                                <span className="rounded-full bg-white/90 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-indigo-700 shadow-sm">
+                                <span className="rounded-full bg-[#fffdf9] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-brand-700 shadow-sm">
                                     Edit lead
                                 </span>
                                 <span className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
@@ -94,8 +94,8 @@ export const EditLeadPage = () => {
                                 Editing <span className="font-semibold text-slate-900">{lead?.firstName} {lead?.lastName}</span>. Keep ownership, source, and next action aligned so the team can move quickly.
                             </p>
                         </div>
-                        <div className="flex items-center gap-3 self-start rounded-[1.25rem] border border-slate-200 bg-white px-4 py-3 shadow-sm">
-                            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
+                        <div className="flex items-center gap-3 self-start rounded-[1.25rem] border border-[var(--mod-border)] bg-[#fffaf4] px-4 py-3 shadow-[0_10px_30px_rgba(120,74,24,0.08)]">
+                            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-50 text-brand-600">
                                 <Settings size={28} strokeWidth={1.8} />
                             </div>
                             <div>
@@ -121,15 +121,15 @@ export const EditLeadPage = () => {
                 >
                     {lead && (
                         <div className="mb-6 grid grid-cols-1 gap-3 md:grid-cols-3">
-                            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+                            <div className="rounded-2xl border border-slate-200 bg-[#fffaf4] px-4 py-3">
                                 <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Current status</p>
                                 <p className="mt-1 text-sm font-bold text-slate-900">{lead.status}</p>
                             </div>
-                            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+                            <div className="rounded-2xl border border-slate-200 bg-[#fffaf4] px-4 py-3">
                                 <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Source</p>
                                 <p className="mt-1 text-sm font-bold text-slate-900">{lead.source || 'Direct'}</p>
                             </div>
-                            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+                            <div className="rounded-2xl border border-slate-200 bg-[#fffaf4] px-4 py-3">
                                 <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Priority</p>
                                 <p className="mt-1 text-sm font-bold text-slate-900">{lead.priority || 'Cold'}</p>
                             </div>
@@ -140,6 +140,7 @@ export const EditLeadPage = () => {
                             initialData={lead}
                             onSubmit={handleSubmit}
                             error={formError}
+                            onCancel={() => navigate(lead ? `${ROUTES.leads}/${lead._id}` : ROUTES.leads)}
                         />
                     )}
                 </WorkspaceSection>
@@ -147,3 +148,4 @@ export const EditLeadPage = () => {
         </div>
     );
 };
+

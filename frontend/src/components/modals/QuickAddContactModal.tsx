@@ -13,9 +13,17 @@ interface QuickAddContactModalProps {
     preSelectedCompanyId?: string;
 }
 
+interface QuickContactResponse {
+    data?: {
+        contact?: {
+            _id: string;
+        };
+    };
+}
+
 const QuickAddContactModal = ({ onClose, onSuccess, preSelectedCompanyId }: QuickAddContactModalProps) => {
     const dispatch = useAppDispatch();
-    const { companies } = useAppSelector((state) => state.companies);
+    const { items: companies } = useAppSelector((state) => state.companies);
     const [loading, setLoading] = useState(false);
     const [formData, setFormData] = useState({
         firstName: '',
@@ -41,7 +49,11 @@ const QuickAddContactModal = ({ onClose, onSuccess, preSelectedCompanyId }: Quic
                 ...formData,
                 status: 'Active',
                 isPrimary: false,
-            })).unwrap();
+            })).unwrap() as QuickContactResponse;
+
+            if (!result.data?.contact?._id) {
+                throw new Error('Contact creation response was missing the contact id');
+            }
 
             onSuccess(result.data.contact._id);
             onClose();
@@ -70,6 +82,11 @@ const QuickAddContactModal = ({ onClose, onSuccess, preSelectedCompanyId }: Quic
             )}
         >
             <form onSubmit={handleSubmit} className="space-y-4" id="quick-contact-form">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <p className="text-sm font-semibold text-slate-900">Create a contact record quickly and attach it to the selected company.</p>
+                    <p className="mt-1 text-xs text-slate-500">Required fields are kept minimal so you can continue the lead workflow without interruption.</p>
+                </div>
+
                 <div className="grid grid-cols-2 gap-3">
                     <div>
                         <FormLabel>

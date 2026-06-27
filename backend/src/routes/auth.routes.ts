@@ -10,7 +10,8 @@ import {
 } from '../controllers/auth.controller';
 import { protect, authorize } from '../middleware/auth.middleware';
 import { checkPermission } from '../middleware/permission.middleware';
-import { authLimiter } from '../middleware/rateLimiter';
+import { authLimiter, sensitiveLimiter } from '../middleware/rateLimiter';
+import { Roles } from '../constants/roles';
 
 const router = Router();
 
@@ -19,10 +20,10 @@ const router = Router();
 router.post('/login', authLimiter, login);
 
 // Slightly more lenient for refresh tokens
-router.post('/refresh-token', refreshToken);
+router.post('/refresh-token', sensitiveLimiter, refreshToken);
 
 // Protected routes
-router.post('/register', protect, authorize('Admin'), checkPermission('users', 'create'), register);
+router.post('/register', protect, authorize(Roles.ADMIN), checkPermission('users', 'create'), register);
 router.get('/me', protect, getMe);
 router.put('/profile', protect, updateProfile);
 router.put('/change-password', protect, changePassword);

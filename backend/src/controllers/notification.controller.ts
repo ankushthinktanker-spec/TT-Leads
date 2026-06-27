@@ -12,14 +12,15 @@ export const getNotifications = async (req: AuthRequest, res: Response, next: Ne
     try {
         const { page, limit, skip } = getPaginationParams(req.query as Record<string, unknown>);
         const sort: Record<string, 1 | -1> = { createdAt: -1 };
-        const filter = { userId: req.user!._id };
+        // P0-2 fix: scope notifications to both userId AND tenantId to prevent cross-tenant leakage
+        const filter = { userId: req.user!._id, tenantId: req.tenantId! };
 
         const { items, total } = await listNotifications(filter, sort, skip, limit);
 
         res.status(200).json({
             success: true,
             data: {
-                items,
+                data: items,
                 meta: buildPaginationMeta(page, limit, total)
             }
         });

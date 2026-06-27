@@ -14,6 +14,7 @@ import {
 import { protect, authorize } from '../middleware/auth.middleware';
 import { checkPermission } from '../middleware/permission.middleware';
 import { isAllowedFile, sanitizeUploadFileName } from '../utils/fileSecurity.utils';
+import { Roles } from '../constants/roles';
 
 const router = express.Router();
 
@@ -71,6 +72,6 @@ router.post(
 router.route('/:id')
     .get(checkPermission('contracts', 'view'), getContract)
     .put(checkPermission('contracts', 'edit'), updateContractHandler)
-    .delete(authorize('Admin', 'Manager'), checkPermission('contracts', 'delete'), deleteContractHandler);
+    .delete(authorize(Roles.ADMIN, Roles.MANAGER), checkPermission('contracts', 'delete'), deleteContractHandler);
 
 export default router;

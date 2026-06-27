@@ -2,6 +2,8 @@ import { Response, NextFunction } from 'express';
 import Activity, { IActivity } from '../models/activity.model';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth.middleware';
+import { Roles } from '../constants/roles';
+import { getPaginationParams, buildPaginationMeta } from '../utils/pagination';
 import { createActivitySchema, updateActivitySchema } from '../validators/activity.validator';
 import mongoose, { FilterQuery } from 'mongoose';
 import Lead from '../models/lead.model';
@@ -9,6 +11,9 @@ import Company from '../models/company.model';
 import Proposal from '../models/proposal.model';
 import User from '../models/user.model';
 import { writeAuditLog } from '../services/audit.service';
+
+const toAuditChanges = (value: { toObject: () => unknown }): Record<string, unknown> =>
+    value.toObject() as unknown as Record<string, unknown>;
 
 const resolveRelatedModel = async (tenantId: string, relatedTo?: { model: string; id: string }) => {
     if (!relatedTo?.model || !relatedTo?.id) return;
@@ -46,8 +51,6 @@ export const getActivities = async (
 ): Promise<void> => {
     try {
         const {
-            page = 1,
-            limit = 10,
             relatedModel,
             relatedId,
             activityType,
@@ -64,7 +67,7 @@ export const getActivities = async (
         const filter: ActivityFilter = { tenantId: req.tenantId! };
 
         // RBAC constraints
-        if (req.user!.role !== 'Admin' && req.user!.role !== 'Manager') {
+        if (req.user!.role !== Roles.ADMIN && req.user!.role !== Roles.MANAGER) {
             filter.createdBy = req.user!._id;
         }
 
@@ -85,7 +88,7 @@ export const getActivities = async (
         }
 
         // Pagination
-        const skip = (Number(page) - 1) * Number(limit);
+        const { page, limit, skip } = getPaginationParams(req.query as Record<string, unknown>);
         const sort: Record<string, 1 | -1> = {};
         sort[sortBy as string] = sortOrder === 'asc' ? 1 : -1;
 
@@ -99,20 +102,16 @@ export const getActivities = async (
             .populate('attendees', 'firstName lastName email')
             .sort(sort)
             .skip(skip)
-            .limit(Number(limit));
+            .limit(limit)
+            .lean();
 
         const total = await Activity.countDocuments(filter);
 
         res.status(200).json({
             success: true,
             data: {
-                activities,
-                pagination: {
-                    page: Number(page),
-                    limit: Number(limit),
-                    total,
-                    pages: Math.ceil(total / Number(limit))
-                }
+                data: activities,
+                meta: buildPaginationMeta(page, limit, total)
             }
         });
     } catch (error) {
@@ -143,8 +142,8 @@ export const getActivity = async (
         }
 
         if (
-            req.user!.role !== 'Admin' &&
-            req.user!.role !== 'Manager' &&
+            req.user!.role !== Roles.ADMIN &&
+            req.user!.role !== Roles.MANAGER &&
             activity.createdBy.toString() !== req.user!._id.toString()
         ) {
             throw new AppError('Not authorized to view this activity', 403);
@@ -168,7 +167,7 @@ export const createActivity = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        const { error, value } = createActivitySchema.validate(req.body);
+        const { error, value } = createActivitySchema.validate(req.body, { stripUnknown: true });
         if (error) {
             throw new AppError(error.details[0].message, 400);
         }
@@ -210,7 +209,7 @@ export const createActivity = async (
             entityType: 'Activity',
             entityId: activity._id.toString(),
             ip: req.ip,
-            changes: activity.toObject() as any
+            changes: toAuditChanges(activity)
         });
 
         res.status(201).json({
@@ -236,7 +235,7 @@ export const updateActivity = async (
             throw new AppError('Invalid activity identifier', 400);
         }
 
-        const { error, value } = updateActivitySchema.validate(req.body);
+        const { error, value } = updateActivitySchema.validate(req.body, { stripUnknown: true });
         if (error) {
             throw new AppError(error.details[0].message, 400);
         }
@@ -246,10 +245,10 @@ export const updateActivity = async (
             throw new AppError('Activity not found or unauthorized access', 404);
         }
 
-        const beforeUpdate = activity.toObject();
+        const beforeUpdate = toAuditChanges(activity);
 
         // Check ownership
-        if (activity.createdBy.toString() !== req.user!._id.toString() && req.user!.role !== 'Admin' && req.user!.role !== 'Manager') {
+        if (activity.createdBy.toString() !== req.user!._id.toString() && req.user!.role !== Roles.ADMIN && req.user!.role !== Roles.MANAGER) {
             throw new AppError('Not authorized to update this activity', 403);
         }
 
@@ -286,7 +285,7 @@ export const updateActivity = async (
             entityType: 'Activity',
             entityId: updatedActivity._id.toString(),
             ip: req.ip,
-            changes: { before: beforeUpdate as any, after: updatedActivity.toObject() as any }
+            changes: { before: beforeUpdate, after: toAuditChanges(updatedActivity) }
         });
 
         res.status(200).json({
@@ -318,7 +317,7 @@ export const deleteActivity = async (
         }
 
         // Check ownership
-        if (activity.createdBy.toString() !== req.user!._id.toString() && req.user!.role !== 'Admin' && req.user!.role !== 'Manager') {
+        if (activity.createdBy.toString() !== req.user!._id.toString() && req.user!.role !== Roles.ADMIN && req.user!.role !== Roles.MANAGER) {
             throw new AppError('Not authorized to delete this activity', 403);
         }
 
@@ -330,7 +329,7 @@ export const deleteActivity = async (
             entityType: 'Activity',
             entityId: activity._id.toString(),
             ip: req.ip,
-            changes: activity.toObject() as any
+            changes: toAuditChanges(activity)
         });
 
         await activity.deleteOne();

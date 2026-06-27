@@ -15,6 +15,7 @@ import {
 import { getLeadActivities, createLeadActivity } from '../controllers/lead-activity.controller';
 import { protect, authorize } from '../middleware/auth.middleware';
 import { checkPermission } from '../middleware/permission.middleware';
+import { Roles } from '../constants/roles';
 
 const router = Router();
 
@@ -35,7 +36,7 @@ router.get('/:id/activities', checkPermission('leads', 'view'), getLeadActivitie
 router.post('/:id/activities', checkPermission('leads', 'edit'), createLeadActivity);
 
 // Admin/Manager only routes
-router.delete('/:id', authorize('Admin', 'Manager'), checkPermission('leads', 'delete'), deleteLead);
-router.patch('/:id/assign', authorize('Admin', 'Manager'), checkPermission('leads', 'assign'), assignLead);
+router.delete('/:id', authorize(Roles.ADMIN, Roles.MANAGER), checkPermission('leads', 'delete'), deleteLead);
+router.patch('/:id/assign', authorize(Roles.ADMIN, Roles.MANAGER), checkPermission('leads', 'assign'), assignLead);
 
 export default router;

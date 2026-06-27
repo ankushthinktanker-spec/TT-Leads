@@ -1,4 +1,5 @@
 import RolePermission from '../models/role-permission.model';
+import { canUseOfflineMode } from '../config/runtime';
 
 export const PERMISSION_MODULES = [
     'deals',
@@ -201,9 +202,51 @@ export const sanitizePermissions = (input: unknown): Partial<RolePermissions> =>
     return sanitized;
 };
 
-export const getEffectivePermissions = async (role: string): Promise<RolePermissions> => {
+// ---------------------------------------------------------------------------
+// TTL permission cache — avoids a DB hit on every protected request.
+// TTL of 60 s is safe because permissions change infrequently.
+// ---------------------------------------------------------------------------
+const permissionCache = new Map<string, { value: RolePermissions; expiresAt: number }>();
+const PERMISSION_CACHE_TTL_MS = 60_000;
+
+function getCachedPermissions(key: string): RolePermissions | undefined {
+    const entry = permissionCache.get(key);
+    if (!entry) return undefined;
+    if (Date.now() > entry.expiresAt) {
+        permissionCache.delete(key);
+        return undefined;
+    }
+    return entry.value;
+}
+
+function setCachedPermissions(key: string, value: RolePermissions): void {
+    permissionCache.set(key, { value, expiresAt: Date.now() + PERMISSION_CACHE_TTL_MS });
+}
+
+// Periodic cleanup to prevent unbounded memory growth
+setInterval(() => {
+    const now = Date.now();
+    for (const [key, entry] of permissionCache) {
+        if (now > entry.expiresAt) permissionCache.delete(key);
+    }
+}, 120_000);
+
+export const getEffectivePermissions = async (role: string, tenantId?: string): Promise<RolePermissions> => {
     const defaults = DEFAULT_ROLE_PERMISSIONS[role] || emptyPermissions();
-    const stored = await RolePermission.findOne({ role }).lean();
+    if (canUseOfflineMode()) {
+        return defaults;
+    }
+
+    const cacheKey = `perm:${role}:${tenantId ?? 'global'}`;
+    const cached = getCachedPermissions(cacheKey);
+    if (cached) return cached;
+
+    const query: Record<string, unknown> = { role };
+    if (tenantId) query.tenantId = tenantId;
+    const stored = await RolePermission.findOne(query).lean();
     const overrides = stored?.permissions || {};
-    return mergePermissions(defaults, overrides);
+    const result = mergePermissions(defaults, overrides);
+
+    setCachedPermissions(cacheKey, result);
+    return result;
 };

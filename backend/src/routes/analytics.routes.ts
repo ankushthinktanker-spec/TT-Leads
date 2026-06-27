@@ -12,6 +12,7 @@ import {
 
 const router = express.Router();
 
+// protect() now enforces tenantId — no separate requireTenant needed
 router.get('/dashboard', protect, checkPermission('analytics', 'view'), getDashboard);
 router.get('/funnel', protect, checkPermission('analytics', 'view'), getFunnelAnalytics);
 router.get('/velocity', protect, checkPermission('analytics', 'view'), getVelocityAnalytics);

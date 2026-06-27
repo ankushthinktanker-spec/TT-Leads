@@ -8,6 +8,7 @@ import {
 } from '../controllers/proposal-template.controller';
 import { protect, authorize } from '../middleware/auth.middleware';
 import { checkPermission } from '../middleware/permission.middleware';
+import { Roles } from '../constants/roles';
 
 const router = express.Router();
 
@@ -15,11 +16,11 @@ router.use(protect);
 
 router.route('/')
     .get(checkPermission('proposal_templates', 'view'), getProposalTemplates)
-    .post(authorize('Admin', 'Manager'), checkPermission('proposal_templates', 'create'), createProposalTemplate);
+    .post(authorize(Roles.ADMIN, Roles.MANAGER), checkPermission('proposal_templates', 'create'), createProposalTemplate);
 
 router.route('/:id')
     .get(checkPermission('proposal_templates', 'view'), getProposalTemplate)
-    .put(authorize('Admin', 'Manager'), checkPermission('proposal_templates', 'edit'), updateProposalTemplate)
-    .delete(authorize('Admin'), checkPermission('proposal_templates', 'delete'), deleteProposalTemplate);
+    .put(authorize(Roles.ADMIN, Roles.MANAGER), checkPermission('proposal_templates', 'edit'), updateProposalTemplate)
+    .delete(authorize(Roles.ADMIN), checkPermission('proposal_templates', 'delete'), deleteProposalTemplate);
 
 export default router;

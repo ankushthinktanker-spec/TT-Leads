@@ -18,6 +18,7 @@ interface ICompanySettings {
 }
 
 interface ISettings extends Document {
+    tenantId: mongoose.Types.ObjectId;
     type: 'Company' | 'System';
     data: ICompanySettings | Record<string, unknown>; // Flexible for other setting types
     updatedBy: mongoose.Types.ObjectId;
@@ -26,11 +27,15 @@ interface ISettings extends Document {
 
 const settingsSchema = new Schema<ISettings>(
     {
+        tenantId: {
+            type: Schema.Types.ObjectId,
+            ref: 'Tenant',
+            required: true
+        },
         type: {
             type: String,
             required: true,
-            enum: ['Company', 'System'],
-            unique: true // Ensure only one document per type
+            enum: ['Company', 'System']
         },
         data: {
             type: Schema.Types.Mixed,
@@ -46,6 +51,9 @@ const settingsSchema = new Schema<ISettings>(
         timestamps: true
     }
 );
+
+// One settings document per type per tenant (replaces the old global unique on type)
+settingsSchema.index({ tenantId: 1, type: 1 }, { unique: true });
 
 const Settings = mongoose.model<ISettings>('Settings', settingsSchema);
 

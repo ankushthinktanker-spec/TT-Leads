@@ -13,13 +13,17 @@ import {
 import { AppError } from '../middleware/errorHandler';
 
 export const getAllRolePermissions = async (
-    _req: AuthRequest,
+    req: AuthRequest,
     res: Response,
     next: NextFunction
 ): Promise<void> => {
     try {
+        if (!req.tenantId) {
+            throw new AppError('Tenant context required', 403);
+        }
+
         const rolesList = await Role.find().sort({ name: 1 }).lean();
-        const storedPermissions = await RolePermission.find().lean();
+        const storedPermissions = await RolePermission.find({ tenantId: req.tenantId }).lean();
         const docMap = new Map<string, Record<string, unknown>>(
             storedPermissions.map((doc) => [doc.role, doc as Record<string, unknown>])
         );
@@ -29,7 +33,7 @@ export const getAllRolePermissions = async (
             const doc = docMap.get(roleName);
             const defaultPerms = DEFAULT_ROLE_PERMISSIONS[roleName] || emptyPermissions();
             const permissions = doc
-                ? getEffectivePermissions(roleName)
+                ? getEffectivePermissions(roleName, req.tenantId)
                 : Promise.resolve(defaultPerms);
             return { role: roleName, permissions, isCustom: !roleDoc.isSystem };
         });
@@ -64,7 +68,7 @@ export const getMyPermissions = async (
             throw new AppError('Not authorized', 401);
         }
 
-        const permissions = await getEffectivePermissions(req.user!.role);
+        const permissions = await getEffectivePermissions(req.user!.role, req.tenantId);
 
         res.status(200).json({
             success: true,
@@ -87,6 +91,9 @@ export const updateRolePermissions = async (
         if (!req.user!) {
             throw new AppError('Not authorized', 401);
         }
+        if (!req.tenantId) {
+            throw new AppError('Tenant context required', 403);
+        }
 
         const role = req.params.role;
         const roleDoc = await Role.findOne({ name: role }).lean();
@@ -97,12 +104,12 @@ export const updateRolePermissions = async (
         const sanitized = sanitizePermissions(req.body?.permissions);
 
         const updated = await RolePermission.findOneAndUpdate(
-            { role },
-            { role, permissions: sanitized, updatedBy: req.user!._id },
+            { tenantId: req.tenantId, role },
+            { tenantId: req.tenantId, role, permissions: sanitized, updatedBy: req.user!._id },
             { new: true, upsert: true, setDefaultsOnInsert: true }
         ).lean();
 
-        const permissions = await getEffectivePermissions(role);
+        const permissions = await getEffectivePermissions(role, req.tenantId);
 
         res.status(200).json({
             success: true,

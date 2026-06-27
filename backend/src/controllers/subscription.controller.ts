@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import mongoose from 'mongoose';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { AppError } from '../middleware/errorHandler';
+import { Roles } from '../constants/roles';
 import { createSubscriptionSchema, updateSubscriptionSchema } from '../validators/subscription.validator';
 import { buildPaginationMeta, getPaginationParams } from '../utils/pagination';
 import { applySearchFilter, getDateRangeParam, getSearchTerm, getStringParam } from '../utils/queryFilters';
@@ -20,7 +21,7 @@ type AccessTarget = { internalOwnerId?: mongoose.Types.ObjectId };
 
 const canAccessSubscription = (subscription: AccessTarget, user: AuthRequest['user']) => {
     if (!user) return false;
-    if (user.role === 'Admin' || user.role === 'Manager') return true;
+    if (user.role === Roles.ADMIN || user.role === Roles.MANAGER) return true;
     return String(subscription.internalOwnerId || '') === String(user._id);
 };
 
@@ -28,7 +29,7 @@ const buildSubscriptionFilter = (req: AuthRequest, useRenewDate = false): Subscr
     const filter: SubscriptionFilter = {};
     const user = req.user!;
 
-    if (user.role !== 'Admin' && user.role !== 'Manager') {
+    if (user.role !== Roles.ADMIN && user.role !== Roles.MANAGER) {
         filter.internalOwnerId = user._id;
     }
 
@@ -71,7 +72,7 @@ export const getSubscriptions = async (req: AuthRequest, res: Response, next: Ne
         res.status(200).json({
             success: true,
             data: {
-                items,
+                data: items,
                 meta: buildPaginationMeta(page, limit, total)
             }
         });
@@ -102,7 +103,7 @@ export const getUpcomingSubscriptions = async (req: AuthRequest, res: Response, 
         res.status(200).json({
             success: true,
             data: {
-                items,
+                data: items,
                 meta: buildPaginationMeta(page, limit, total)
             }
         });
@@ -139,7 +140,7 @@ export const getSubscription = async (req: AuthRequest, res: Response, next: Nex
 // @access  Private
 export const createSubscriptionHandler = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const { error, value } = createSubscriptionSchema.validate(req.body);
+        const { error, value } = createSubscriptionSchema.validate(req.body, { stripUnknown: true });
         if (error) {
             throw new AppError(error.details[0].message, 400);
         }
@@ -170,7 +171,7 @@ export const updateSubscriptionHandler = async (req: AuthRequest, res: Response,
             throw new AppError('Invalid subscription identifier', 400);
         }
 
-        const { error, value } = updateSubscriptionSchema.validate(req.body);
+        const { error, value } = updateSubscriptionSchema.validate(req.body, { stripUnknown: true });
         if (error) {
             throw new AppError(error.details[0].message, 400);
         }

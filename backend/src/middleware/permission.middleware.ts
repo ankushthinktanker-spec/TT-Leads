@@ -11,7 +11,7 @@ export const checkPermission = (moduleKey: PermissionModule, actionKey: Permissi
                 throw new AppError('Not authorized', 401);
             }
 
-            const permissions = await getEffectivePermissions(req.user.role);
+            const permissions = await getEffectivePermissions(req.user.role, req.tenantId);
             const allowed = can(permissions, moduleKey, actionKey);
 
             if (!allowed) {

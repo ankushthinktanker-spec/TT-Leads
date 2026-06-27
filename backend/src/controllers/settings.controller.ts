@@ -1,6 +1,7 @@
 ﻿import { Response, NextFunction } from 'express';
 import Settings from '../models/settings.model';
 import { AuthRequest } from '../middleware/auth.middleware';
+import { AppError } from '../middleware/errorHandler';
 
 // @desc    Get settings by type
 // @route   GET /api/settings/:type
@@ -11,9 +12,13 @@ export const getSettings = async (
     next: NextFunction
 ): Promise<void> => {
     try {
+        if (!req.tenantId) {
+            throw new AppError('Tenant context required', 403);
+        }
+
         const { type } = req.params;
 
-        const settings = await Settings.findOne({ type });
+        const settings = await Settings.findOne({ tenantId: req.tenantId, type });
 
         // Return default empty structure if not found
         if (!settings) {
@@ -42,12 +47,17 @@ export const updateSettings = async (
     next: NextFunction
 ): Promise<void> => {
     try {
+        if (!req.tenantId) {
+            throw new AppError('Tenant context required', 403);
+        }
+
         const { type } = req.params;
         const data = req.body;
 
         const settings = await Settings.findOneAndUpdate(
-            { type },
+            { tenantId: req.tenantId, type },
             {
+                tenantId: req.tenantId,
                 type,
                 data,
                 updatedBy: req.user!._id

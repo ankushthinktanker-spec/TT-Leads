@@ -2,12 +2,27 @@ import { Response, NextFunction } from 'express';
 import mongoose from 'mongoose';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { AppError } from '../middleware/errorHandler';
+import { Roles } from '../constants/roles';
 import { createDealSchema, updateDealSchema, updateDealStatusSchema, updateDealStageSchema, assignDealSchema } from '../validators/deal.validator';
 import { buildPaginationMeta, getPaginationParams } from '../utils/pagination';
 import { applySearchFilter, getDateRangeParam, getSearchTerm, getStringParam, getTagsParam } from '../utils/queryFilters';
 import { createDeal, deleteDeal, getDealById, listDeals, updateDeal } from '../services/deal.service';
 import type { IDeal } from '../models/deal.model';
 import { writeAuditLog } from '../services/audit.service';
+import User from '../models/user.model';
+
+type DealAccessTarget = { ownerId?: mongoose.Types.ObjectId; createdBy?: mongoose.Types.ObjectId };
+
+const toAuditChanges = (value: { toObject: () => unknown }): Record<string, unknown> =>
+    value.toObject() as Record<string, unknown>;
+
+const canAccessDeal = (req: AuthRequest, deal: DealAccessTarget): boolean => {
+    const role = req.user!.role;
+    if (role === Roles.ADMIN || role === Roles.MANAGER) return true;
+    const userId = req.user!._id.toString();
+    const ownerId = deal.ownerId?.toString() || deal.createdBy?.toString();
+    return userId === ownerId;
+};
 
 type DealFilter = Record<string, unknown>;
 
@@ -15,7 +30,7 @@ const buildDealFilter = (req: AuthRequest): DealFilter => {
     const filter: DealFilter = { tenantId: req.tenantId! };
     const user = req.user!;
 
-    if (user.role !== 'Admin' && user.role !== 'Manager') {
+    if (user.role !== Roles.ADMIN && user.role !== Roles.MANAGER) {
         filter.createdBy = user._id;
     }
 
@@ -64,7 +79,7 @@ export const getDeals = async (req: AuthRequest, res: Response, next: NextFuncti
         res.status(200).json({
             success: true,
             data: {
-                items,
+                data: items,
                 meta: buildPaginationMeta(page, limit, total)
             }
         });
@@ -98,7 +113,7 @@ export const getDeal = async (req: AuthRequest, res: Response, next: NextFunctio
 // @access  Private
 export const createDealHandler = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const { error, value } = createDealSchema.validate(req.body);
+        const { error, value } = createDealSchema.validate(req.body, { stripUnknown: true });
         if (error) {
             throw new AppError(error.details[0].message, 400);
         }
@@ -118,7 +133,7 @@ export const createDealHandler = async (req: AuthRequest, res: Response, next: N
             entityType: 'Deal',
             entityId: deal._id.toString(),
             ip: req.ip,
-            changes: deal.toObject() as any
+            changes: toAuditChanges(deal)
         });
 
         res.status(201).json({
@@ -140,7 +155,7 @@ export const updateDealHandler = async (req: AuthRequest, res: Response, next: N
             throw new AppError('Invalid deal identifier', 400);
         }
 
-        const { error, value } = updateDealSchema.validate(req.body);
+        const { error, value } = updateDealSchema.validate(req.body, { stripUnknown: true });
         if (error) {
             throw new AppError(error.details[0].message, 400);
         }
@@ -148,6 +163,10 @@ export const updateDealHandler = async (req: AuthRequest, res: Response, next: N
         const beforeUpdate = await getDealById(req.tenantId!, req.params.id);
         if (!beforeUpdate) {
             throw new AppError('Deal not found or unauthorized access', 404);
+        }
+
+        if (!canAccessDeal(req, beforeUpdate)) {
+            throw new AppError('You do not have permission to modify this deal', 403);
         }
 
         const deal = await updateDeal(req.tenantId!, req.params.id, value);
@@ -163,7 +182,7 @@ export const updateDealHandler = async (req: AuthRequest, res: Response, next: N
             entityType: 'Deal',
             entityId: deal._id.toString(),
             ip: req.ip,
-            changes: { before: beforeUpdate.toObject() as any, after: deal.toObject() as any }
+            changes: { before: toAuditChanges(beforeUpdate), after: toAuditChanges(deal) }
         });
 
         res.status(200).json({
@@ -190,6 +209,10 @@ export const deleteDealHandler = async (req: AuthRequest, res: Response, next: N
             throw new AppError('Deal not found or unauthorized access', 404);
         }
 
+        if (!canAccessDeal(req, deal)) {
+            throw new AppError('You do not have permission to modify this deal', 403);
+        }
+
         // 📍 SECURITY: Audit Log Delete
         await writeAuditLog({
             tenantId: req.tenantId!,
@@ -198,7 +221,7 @@ export const deleteDealHandler = async (req: AuthRequest, res: Response, next: N
             entityType: 'Deal',
             entityId: deal._id.toString(),
             ip: req.ip,
-            changes: deal.toObject() as any
+            changes: toAuditChanges(deal)
         });
 
         const deleted = await deleteDeal(req.tenantId!, req.params.id);
@@ -221,7 +244,7 @@ export const updateDealStatus = async (req: AuthRequest, res: Response, next: Ne
             throw new AppError('Invalid deal identifier', 400);
         }
 
-        const { error, value } = updateDealStatusSchema.validate(req.body);
+        const { error, value } = updateDealStatusSchema.validate(req.body, { stripUnknown: true });
         if (error) {
             throw new AppError(error.details[0].message, 400);
         }
@@ -229,6 +252,10 @@ export const updateDealStatus = async (req: AuthRequest, res: Response, next: Ne
         const deal = await getDealById(req.tenantId!, req.params.id);
         if (!deal) {
             throw new AppError('Deal not found or unauthorized access', 404);
+        }
+
+        if (!canAccessDeal(req, deal)) {
+            throw new AppError('You do not have permission to modify this deal', 403);
         }
 
         const oldStatus = deal.status;
@@ -261,7 +288,7 @@ export const updateDealStage = async (req: AuthRequest, res: Response, next: Nex
             throw new AppError('Invalid deal identifier', 400);
         }
 
-        const { error, value } = updateDealStageSchema.validate(req.body);
+        const { error, value } = updateDealStageSchema.validate(req.body, { stripUnknown: true });
         if (error) {
             throw new AppError(error.details[0].message, 400);
         }
@@ -269,6 +296,10 @@ export const updateDealStage = async (req: AuthRequest, res: Response, next: Nex
         const deal = await getDealById(req.tenantId!, req.params.id);
         if (!deal) {
             throw new AppError('Deal not found or unauthorized access', 404);
+        }
+
+        if (!canAccessDeal(req, deal)) {
+            throw new AppError('You do not have permission to modify this deal', 403);
         }
 
         const oldStageId = deal.stageId;
@@ -304,7 +335,7 @@ export const assignDealOwner = async (req: AuthRequest, res: Response, next: Nex
             throw new AppError('Invalid deal identifier', 400);
         }
 
-        const { error, value } = assignDealSchema.validate(req.body);
+        const { error, value } = assignDealSchema.validate(req.body, { stripUnknown: true });
         if (error) {
             throw new AppError(error.details[0].message, 400);
         }
@@ -312,6 +343,15 @@ export const assignDealOwner = async (req: AuthRequest, res: Response, next: Nex
         const deal = await getDealById(req.tenantId!, req.params.id);
         if (!deal) {
             throw new AppError('Deal not found or unauthorized access', 404);
+        }
+
+        if (!canAccessDeal(req, deal)) {
+            throw new AppError('You do not have permission to modify this deal', 403);
+        }
+
+        const targetUser = await User.findOne({ _id: value.ownerId, tenantId: req.tenantId });
+        if (!targetUser) {
+            throw new AppError('Target user not found in your organization', 404);
         }
 
         const oldOwnerId = deal.ownerId;
@@ -326,7 +366,7 @@ export const assignDealOwner = async (req: AuthRequest, res: Response, next: Nex
             entityType: 'Deal',
             entityId: deal._id.toString(),
             ip: req.ip,
-            changes: { from: oldOwnerId as any, to: value.ownerId }
+            changes: { from: oldOwnerId ? String(oldOwnerId) : null, to: value.ownerId }
         });
 
         res.status(200).json({ success: true, message: 'Deal owner updated', data: { deal } });

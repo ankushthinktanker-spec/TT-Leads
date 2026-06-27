@@ -11,6 +11,7 @@ import {
 } from '../controllers/deal.controller';
 import { protect, authorize } from '../middleware/auth.middleware';
 import { checkPermission } from '../middleware/permission.middleware';
+import { Roles } from '../constants/roles';
 
 const router = express.Router();
 
@@ -23,10 +24,10 @@ router.route('/')
 router.route('/:id')
     .get(checkPermission('deals', 'view'), getDeal)
     .put(checkPermission('deals', 'edit'), updateDealHandler)
-    .delete(authorize('Admin', 'Manager'), checkPermission('deals', 'delete'), deleteDealHandler);
+    .delete(authorize(Roles.ADMIN, Roles.MANAGER), checkPermission('deals', 'delete'), deleteDealHandler);
 
 router.patch('/:id/status', checkPermission('deals', 'status_change'), updateDealStatus);
 router.patch('/:id/stage', checkPermission('deals', 'edit'), updateDealStage);
-router.patch('/:id/assign', authorize('Admin', 'Manager'), checkPermission('deals', 'assign'), assignDealOwner);
+router.patch('/:id/assign', authorize(Roles.ADMIN, Roles.MANAGER), checkPermission('deals', 'assign'), assignDealOwner);
 
 export default router;

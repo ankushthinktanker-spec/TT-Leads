@@ -2,6 +2,8 @@ import { Response, NextFunction } from 'express';
 import Task, { ITask } from '../models/task.model';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth.middleware';
+import { Roles } from '../constants/roles';
+import { getPaginationParams, buildPaginationMeta } from '../utils/pagination';
 import { createTaskSchema, updateTaskSchema } from '../validators/task.validator';
 import mongoose, { FilterQuery } from 'mongoose';
 import { taskRepository } from '../repositories/task.repository';
@@ -12,6 +14,12 @@ import Company from '../models/company.model';
 import Proposal from '../models/proposal.model';
 import Activity from '../models/activity.model';
 import { writeAuditLog } from '../services/audit.service';
+
+const toAuditChanges = (value: { toObject: () => unknown }): Record<string, unknown> =>
+    value.toObject() as unknown as Record<string, unknown>;
+
+const getTaskEntityId = (task: { _id?: unknown } | null | undefined, fallback: string): string =>
+    task?._id ? String(task._id) : fallback;
 
 const resolveRelatedModel = async (tenantId: string, relatedTo?: { model: string; id: string }) => {
     if (!relatedTo?.model || !relatedTo?.id) return;
@@ -35,8 +43,6 @@ export const getTasks = async (
 ): Promise<void> => {
     try {
         const {
-            page = 1,
-            limit = 10,
             assignedTo,
             status,
             priority,
@@ -54,7 +60,7 @@ export const getTasks = async (
         const filter: TaskFilter = { tenantId: req.tenantId! };
 
         // RBAC constraints
-        if (req.user!.role !== 'Admin' && req.user!.role !== 'Manager') {
+        if (req.user!.role !== Roles.ADMIN && req.user!.role !== Roles.MANAGER) {
             filter.assignedTo = req.user!._id;
         } else if (assignedTo) {
             filter.assignedTo = assignedTo;
@@ -72,7 +78,7 @@ export const getTasks = async (
         }
 
         // Pagination
-        const skip = (Number(page) - 1) * Number(limit);
+        const { page, limit, skip } = getPaginationParams(req.query as Record<string, unknown>);
         const sort: Record<string, 1 | -1> = {};
         sort[sortBy as string] = sortOrder === 'asc' ? 1 : -1;
 
@@ -85,7 +91,7 @@ export const getTasks = async (
             ],
             sort,
             skip,
-            limit: Number(limit)
+            limit
         });
 
         const total = await taskRepository.count(req.tenantId!, filter);
@@ -93,13 +99,8 @@ export const getTasks = async (
         res.status(200).json({
             success: true,
             data: {
-                tasks,
-                pagination: {
-                    page: Number(page),
-                    limit: Number(limit),
-                    total,
-                    pages: Math.ceil(total / Number(limit))
-                }
+                data: tasks,
+                meta: buildPaginationMeta(page, limit, total)
             }
         });
     } catch (error) {
@@ -136,7 +137,7 @@ export const createTask = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        const { error, value } = createTaskSchema.validate(req.body);
+        const { error, value } = createTaskSchema.validate(req.body, { stripUnknown: true });
         if (error) {
             throw new AppError(error.details[0].message, 400);
         }
@@ -162,7 +163,7 @@ export const createTask = async (
             entityType: 'Task',
             entityId: task._id.toString(),
             ip: req.ip,
-            changes: task.toObject() as any
+            changes: toAuditChanges(task)
         });
 
         res.status(201).json({
@@ -188,7 +189,7 @@ export const updateTask = async (
             throw new AppError('Invalid task identifier', 400);
         }
 
-        const { error, value } = updateTaskSchema.validate(req.body);
+        const { error, value } = updateTaskSchema.validate(req.body, { stripUnknown: true });
         if (error) {
             throw new AppError(error.details[0].message, 400);
         }
@@ -198,11 +199,11 @@ export const updateTask = async (
             throw new AppError('Task not found in your organization', 404);
         }
 
-        const beforeUpdate = task.toObject();
+        const beforeUpdate = toAuditChanges(task);
 
         // Check access
         if (
-            req.user!.role !== 'Admin' && req.user!.role !== 'Manager' &&
+            req.user!.role !== Roles.ADMIN && req.user!.role !== Roles.MANAGER &&
             task.assignedTo?.toString() !== req.user!._id.toString() &&
             task.createdBy.toString() !== req.user!._id.toString()
         ) {
@@ -270,7 +271,7 @@ export const updateTask = async (
             entityType: 'Task',
             entityId: updatedTask._id.toString(),
             ip: req.ip,
-            changes: { before: beforeUpdate as any, after: updatedTask.toObject() as any }
+            changes: { before: beforeUpdate, after: toAuditChanges(updatedTask) }
         });
 
         res.status(200).json({
@@ -304,7 +305,7 @@ export const completeTask = async (
             actorId: req.user!._id.toString(),
             action: 'STATUS_UPDATE',
             entityType: 'Task',
-            entityId: (task as any)._id?.toString() || req.params.id,
+            entityId: getTaskEntityId(task, req.params.id),
             ip: req.ip,
             changes: { status: 'Completed' }
         });
@@ -333,7 +334,7 @@ export const deleteTask = async (
         // Access check: Only creator, manager or admin can delete
         if (
             task.createdBy.toString() !== req.user!._id.toString() &&
-            req.user!.role !== 'Admin' && req.user!.role !== 'Manager'
+            req.user!.role !== Roles.ADMIN && req.user!.role !== Roles.MANAGER
         ) {
             throw new AppError('Not authorized to delete this task', 403);
         }
@@ -346,7 +347,7 @@ export const deleteTask = async (
             entityType: 'Task',
             entityId: req.params.id,
             ip: req.ip,
-            changes: (task as any).toObject ? (task as any).toObject() : task
+            changes: toAuditChanges(task)
         });
 
         await taskRepository.deleteById(req.tenantId!, req.params.id);

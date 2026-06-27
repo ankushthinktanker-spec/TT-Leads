@@ -6,7 +6,6 @@ import {
     createSubscription,
     updateSubscription,
     deleteSubscription,
-    updateSubscriptionStatus
 } from '../../store/slices/subscriptionSlice';
 import { fetchCompanies } from '../../store/slices/companySlice';
 import { fetchUsers } from '../../store/slices/userSlice';
@@ -40,8 +39,8 @@ const QUICK_WINDOWS = [
 
 const SubscriptionsPage = () => {
     const dispatch = useAppDispatch();
-    const { subscriptions, loading, error, pagination } = useAppSelector((state) => state.subscriptions);
-    const { companies } = useAppSelector((state) => state.companies);
+    const { items: subscriptions, loading, error, pagination } = useAppSelector((state) => state.subscriptions);
+    const { items: companies } = useAppSelector((state) => state.companies);
     const { users } = useAppSelector((state) => state.users);
     const { user } = useAppSelector((state) => state.auth);
 
@@ -51,7 +50,7 @@ const SubscriptionsPage = () => {
     const [companyId, setCompanyId] = useState('');
     const [type, setType] = useState('');
     const [quickWindow, setQuickWindow] = useState('');
-    const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
+    const [sortOrder] = useState<SortOrder>('desc');
     const [currentPage, setCurrentPage] = useState(1);
 
     const [modalOpen, setModalOpen] = useState(false);
@@ -105,8 +104,8 @@ const SubscriptionsPage = () => {
         ...(search.trim() ? [{ key: 'search', label: `Search: "${search.trim()}"`, onRemove: () => setSearch('') }] : []),
         ...(status ? [{ key: 'status', label: `Status: ${status}`, onRemove: () => setStatus('') }] : []),
         ...(type ? [{ key: 'type', label: `Type: ${type}`, onRemove: () => setType('') }] : []),
-        ...(companyId ? [{ key: 'company', label: `Company: ${companies.find((c) => c._id === companyId)?.name || 'Selected'}`, onRemove: () => setCompanyId('') }] : []),
-        ...(ownerId ? [{ key: 'owner', label: `Owner: ${users.find((u) => u._id === ownerId)?.firstName || 'Selected'}`, onRemove: () => setOwnerId('') }] : []),
+        ...(companyId ? [{ key: 'company', label: `Company: ${companies.find((c: { _id: string; name: string }) => c._id === companyId)?.name || 'Selected'}`, onRemove: () => setCompanyId('') }] : []),
+        ...(ownerId ? [{ key: 'owner', label: `Owner: ${users.find((u: { _id: string; firstName?: string }) => u._id === ownerId)?.firstName || 'Selected'}`, onRemove: () => setOwnerId('') }] : []),
         ...(quickWindow ? [{ key: 'window', label: `Renewals: ${QUICK_WINDOWS.find(w => w.value === quickWindow)?.label}`, onRemove: () => setQuickWindow('') }] : []),
     ];
 
@@ -193,7 +192,7 @@ const SubscriptionsPage = () => {
         dispatch(fetchSubscriptions({ page: currentPage, limit: 20, sortOrder }));
     };
 
-    const activeSubscriptions = subscriptions.filter((s) => s.status === 'Active').length;
+    const activeSubscriptions = subscriptions.filter((s: typeof subscriptions[number]) => s.status === 'Active').length;
     const upcomingRenewals = subscriptions.filter((s) => {
         if (!s.renewDate) return false;
         const diff = new Date(s.renewDate).getTime() - Date.now();
@@ -202,7 +201,7 @@ const SubscriptionsPage = () => {
     const serviceTypes = new Set(subscriptions.map((s) => s.type).filter(Boolean)).size;
 
     const summaryCards: SummaryCardItem[] = [
-        { label: 'Total Subscriptions', value: pagination.totalItems, icon: <Layers3 size={18} />, variant: 'primary' },
+        { label: 'Total Subscriptions', value: pagination.total, icon: <Layers3 size={18} />, variant: 'primary' },
         { label: 'Active', value: activeSubscriptions, icon: <Layers3 size={18} />, variant: 'success' },
         { label: 'Renewals (30d)', value: upcomingRenewals, icon: <CalendarClock size={18} />, variant: 'warning' },
         { label: 'Service Types', value: serviceTypes, icon: <Layers3 size={18} />, variant: 'info' },
@@ -323,7 +322,7 @@ const SubscriptionsPage = () => {
                 onSearchChange={setSearch}
                 activeFilters={activeFilters}
                 onClearAllFilters={handleClearFilters}
-                totalCount={pagination.totalItems}
+                totalCount={pagination.total}
                 countLabel="subscriptions"
                 filterContent={
                     <>
@@ -346,7 +345,7 @@ const SubscriptionsPage = () => {
                                 <label className="mod-filter-panel__field-label">Owner</label>
                                 <select className="mod-toolbar__select" style={{ width: '100%' }} value={ownerId} onChange={(e) => setOwnerId(e.target.value)}>
                                     <option value="">All owners</option>
-                                    {users.map((u) => <option key={u._id} value={u._id}>{u.firstName} {u.lastName}</option>)}
+                                    {users.map((u: { _id: string; firstName: string; lastName: string }) => <option key={u._id} value={u._id}>{u.firstName} {u.lastName}</option>)}
                                 </select>
                             </div>
                         )}
@@ -387,7 +386,7 @@ const SubscriptionsPage = () => {
                 }
                 page={currentPage}
                 totalPages={pagination.totalPages}
-                totalItems={pagination.totalItems}
+                totalItems={pagination.total}
                 onPageChange={setCurrentPage}
             />
 
@@ -447,7 +446,7 @@ const SubscriptionsPage = () => {
                             <FormLabel>Company</FormLabel>
                             <SelectInput value={formData.companyId} onChange={(e) => setFormData((prev) => ({ ...prev, companyId: e.target.value }))}>
                                 <option value="">Select Company</option>
-                                {companies.map((company) => (
+                                {companies.map((company: { _id: string; name: string }) => (
                                     <option key={company._id} value={company._id}>{company.name}</option>
                                 ))}
                             </SelectInput>
@@ -456,7 +455,7 @@ const SubscriptionsPage = () => {
                             <FormLabel>Owner</FormLabel>
                             <SelectInput value={formData.internalOwnerId} onChange={(e) => setFormData((prev) => ({ ...prev, internalOwnerId: e.target.value }))}>
                                 <option value="">Select Owner</option>
-                                {users.map((owner) => (
+                                {users.map((owner: { _id: string; firstName: string; lastName: string }) => (
                                     <option key={owner._id} value={owner._id}>
                                         {owner.firstName} {owner.lastName}
                                     </option>
@@ -512,3 +511,6 @@ const SubscriptionsPage = () => {
 };
 
 export default SubscriptionsPage;
+
+
+

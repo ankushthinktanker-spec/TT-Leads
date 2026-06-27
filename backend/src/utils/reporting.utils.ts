@@ -1,6 +1,10 @@
 import { AuthRequest } from '../middleware/auth.middleware';
+import mongoose from 'mongoose';
+import { Roles } from '../constants/roles';
 import type { FilterQuery } from 'mongoose';
 import type { ILead } from '../models/lead.model';
+import { escapeRegex } from './regex.utils';
+import { AppError } from '../middleware/errorHandler';
 
 export const DEFAULT_PROBABILITY_MAP: Record<string, number> = {
     New: 10,
@@ -22,6 +26,12 @@ export const parseDateRange = (startDate?: string, endDate?: string): { $gte?: D
     return range;
 };
 
+const toObjectIdIfValid = (value?: string | mongoose.Types.ObjectId | null) => {
+    if (!value) return undefined;
+    if (value instanceof mongoose.Types.ObjectId) return value;
+    return mongoose.isValidObjectId(value) ? new mongoose.Types.ObjectId(value) : value;
+};
+
 const resolveOwnerScope = (
     req: AuthRequest,
     field: string,
@@ -31,19 +41,20 @@ const resolveOwnerScope = (
     if (!user) {
         return {};
     }
-    const canViewTeam = user.role === 'Admin' || user.role === 'Manager';
+    const canViewTeam = user.role === Roles.ADMIN || user.role === Roles.MANAGER;
     const requestedScope = (req.query.ownerScope as string) || 'me';
     const scope = canViewTeam ? requestedScope : 'me';
 
     if (ownerIdParam) {
+        const scopedOwnerId = toObjectIdIfValid(ownerIdParam);
         if (canViewTeam || ownerIdParam.toString() === user._id.toString()) {
-            return { [field]: ownerIdParam };
+            return { [field]: scopedOwnerId };
         }
         return { [field]: user._id };
     }
 
     if (scope === 'team') {
-        return user.teamId ? { teamId: user.teamId } : {};
+        return user.teamId ? { teamId: toObjectIdIfValid(user.teamId) } : {};
     }
 
     if (scope === 'all') {
@@ -56,6 +67,13 @@ const resolveOwnerScope = (
 export const buildLeadFilters = (req: AuthRequest): FilterQuery<ILead> => {
     const filter: FilterQuery<ILead> = {};
 
+    // CRITICAL: Enforce tenant isolation on all analytics/report queries
+    // P0-1 fix: assert tenantId is present — a missing tenantId would expose ALL tenants' data
+    if (!req.tenantId) {
+        throw new AppError('Tenant context is required for analytics and report queries', 403);
+    }
+    filter.tenantId = toObjectIdIfValid(req.tenantId);
+
     Object.assign(filter, resolveOwnerScope(req, 'assignedTo', req.query.ownerId as string));
 
     const status = req.query.status || req.query.stage;
@@ -65,10 +83,11 @@ export const buildLeadFilters = (req: AuthRequest): FilterQuery<ILead> => {
     if (req.query.industry) filter.industry = req.query.industry;
 
     if (req.query.location) {
+        const escapedLocation = escapeRegex(req.query.location as string);
         filter.$or = [
-            { 'location.city': new RegExp(req.query.location as string, 'i') },
-            { 'location.state': new RegExp(req.query.location as string, 'i') },
-            { 'location.country': new RegExp(req.query.location as string, 'i') }
+            { 'location.city': new RegExp(escapedLocation, 'i') },
+            { 'location.state': new RegExp(escapedLocation, 'i') },
+            { 'location.country': new RegExp(escapedLocation, 'i') }
         ];
     }
 

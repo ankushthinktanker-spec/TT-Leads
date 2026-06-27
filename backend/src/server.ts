@@ -1,10 +1,14 @@
-import app from './app';
+﻿import app from './app';
 import connectDB from './config/database';
 import { ensureDefaultRoles } from './utils/role.utils';
 import { startSubscriptionScheduler } from './services/subscriptionScheduler';
-import { env } from './config/env';
+import { canUseOfflineMode, setDatabaseReady, setRuntimeMode } from './config/runtime';
+import { validateRuntimeConfig } from './config/validateRuntime';
 
-const PORT = env.PORT;
+const { runtimeMode } = validateRuntimeConfig(process.env);
+setRuntimeMode(runtimeMode);
+
+const PORT = Number(process.env.PORT || 5000);
 let server: ReturnType<typeof app.listen> | null = null;
 
 const isIgnorableStreamError = (err: NodeJS.ErrnoException): boolean =>
@@ -54,14 +58,30 @@ process.on('SIGTERM', () => {
 });
 
 const startServer = async () => {
-    await connectDB();
-    await ensureDefaultRoles();
+    let databaseAvailable = false;
+    try {
+        await connectDB();
+        await ensureDefaultRoles();
+        setDatabaseReady(true);
+        databaseAvailable = true;
+    } catch (error) {
+        setDatabaseReady(false);
+        if (!canUseOfflineMode()) {
+            throw error;
+        }
+        console.warn('Starting backend in development offline mode because the database is unavailable.');
+        console.warn(error instanceof Error ? error.message : error);
+    }
 
     server = app.listen(PORT, () => {
         console.log(`Server is running on port ${PORT}`);
         console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
         console.log(`Health check: http://localhost:${PORT}/health`);
-        startSubscriptionScheduler();
+        if (databaseAvailable) {
+            startSubscriptionScheduler();
+        } else {
+            console.log('Offline mode: database-backed modules are limited until MongoDB is reachable.');
+        }
     });
 };
 

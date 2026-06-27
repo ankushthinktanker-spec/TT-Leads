@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import DOMPurify from 'dompurify';
 import { useAppDispatch, useAppSelector } from '../../hooks/redux';
-import { fetchProposalById, generateProposalPDF } from '../../store/slices/proposalSlice';
+import { fetchProposalById, generateProposalPDF, clearCurrentProposal } from '../../store/slices/proposalSlice';
 import PageLayout from '../../components/ui/PageLayout';
 import Button from '../../components/ui/Button';
 import api from '../../api/axios';
@@ -178,6 +179,9 @@ const ProposalPreviewPage = () => {
         if (id) {
             dispatch(fetchProposalById(id));
         }
+        return () => {
+            dispatch(clearCurrentProposal());
+        };
     }, [dispatch, id]);
 
     useEffect(() => {
@@ -425,7 +429,7 @@ const ProposalPreviewPage = () => {
                     description="Review the proposal as a client-facing document, validate pagination, and switch between HTML and generated PDF."
                     eyebrow="Document review"
                     aside={
-                        <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 p-1">
+                        <div className="flex items-center gap-2 rounded-full border border-[var(--mod-border)] bg-[#fffdf9]/95 p-1">
                             <button
                                 type="button"
                                 onClick={() => setMode('html')}
@@ -444,7 +448,7 @@ const ProposalPreviewPage = () => {
                     }
                     contentClassName="px-0 py-0"
                 >
-                <div className="preview-viewer border-0 bg-white shadow-none">
+                <div className="preview-viewer border-0 bg-[#fffaf4] shadow-none">
                     {mode === 'pdf' ? (
                         pdfUrl ? (
                             <div className="preview-scroll">
@@ -516,7 +520,7 @@ const ProposalPreviewPage = () => {
                                                     <div
                                                         key={block.key}
                                                         className="section-content"
-                                                        dangerouslySetInnerHTML={{ __html: block.html || '' }}
+                                                        dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(block.html || '') }}
                                                     />
                                                 );
                                             })}
@@ -534,7 +538,7 @@ const ProposalPreviewPage = () => {
                                 key={block.key}
                                 data-block-key={block.key}
                                 className={block.type === 'title' ? 'section-title' : 'section-content'}
-                                dangerouslySetInnerHTML={block.type === 'content' ? { __html: block.html || '' } : undefined}
+                                dangerouslySetInnerHTML={block.type === 'content' ? { __html: DOMPurify.sanitize(block.html || '') } : undefined}
                             >
                                 {block.type === 'title' ? block.text : null}
                             </div>
@@ -581,7 +585,7 @@ const styles = `
     }
 
     .editor-content-view th, .preview-measure th {
-        background-color: #f8fafc;
+        background-color: #fffaf4;
         font-weight: bold;
     }
 
@@ -608,5 +612,6 @@ if (typeof document !== 'undefined') {
     styleSheet.innerText = styles;
     document.head.appendChild(styleSheet);
 }
+
 
 

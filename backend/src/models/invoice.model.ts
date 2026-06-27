@@ -27,7 +27,7 @@ const invoiceSchema = new Schema<IInvoice>(
             ref: 'Tenant',
             required: [true, 'Tenant ID is strongly required for invoice isolation']
         },
-        invoiceNumber: { type: String, required: true, trim: true, unique: true },
+        invoiceNumber: { type: String, required: true, trim: true },
         companyId: { type: Schema.Types.ObjectId, ref: 'Company', required: true },
         dealId: { type: Schema.Types.ObjectId, ref: 'Deal' },
         contractId: { type: Schema.Types.ObjectId, ref: 'Contract' },
@@ -45,6 +45,7 @@ const invoiceSchema = new Schema<IInvoice>(
     { timestamps: true }
 );
 
+invoiceSchema.index({ tenantId: 1, invoiceNumber: 1 }, { unique: true });
 invoiceSchema.index({ tenantId: 1, companyId: 1, status: 1 });
 invoiceSchema.index({ tenantId: 1, ownerId: 1, createdAt: -1 });
 

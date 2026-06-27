@@ -1,4 +1,5 @@
 import { cn } from '../../lib/utils';
+import ModuleFilterDropdown from '../module-system/ModuleFilterDropdown';
 
 export type DateRangePreset = '7d' | '15d' | '30d' | '3m' | '6m' | 'custom';
 
@@ -24,19 +25,20 @@ const presetLabels: Record<DateRangePreset, string> = {
 };
 
 const DateRangePicker = ({ value, onChange, className }: DateRangePickerProps) => {
+    const dateOptions = Object.entries(presetLabels).map(([key, label]) => ({
+        value: key,
+        label,
+    }));
+
     return (
         <div className={cn('flex items-center gap-2', className)}>
-            <select
-                className="input h-10 text-sm"
+            <ModuleFilterDropdown
+                ariaLabel="Select date range preset"
                 value={value.preset}
-                onChange={(e) => onChange({ ...value, preset: e.target.value as DateRangePreset })}
-            >
-                {Object.entries(presetLabels).map(([key, label]) => (
-                    <option key={key} value={key}>
-                        {label}
-                    </option>
-                ))}
-            </select>
+                options={dateOptions}
+                onChange={(nextValue) => onChange({ ...value, preset: nextValue as DateRangePreset })}
+                triggerClassName="input !h-10 !text-sm !font-medium !normal-case !tracking-normal"
+            />
             {value.preset === 'custom' && (
                 <>
                     <input

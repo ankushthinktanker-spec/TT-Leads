@@ -39,7 +39,7 @@ interface LeadState {
     error: string | null;
     total: number;
     page: number;
-    pages: number;
+    totalPages: number;
 }
 
 const initialState: LeadState = {
@@ -49,7 +49,7 @@ const initialState: LeadState = {
     error: null,
     total: 0,
     page: 1,
-    pages: 1,
+    totalPages: 1,
 };
 
 // Async Thunks
@@ -64,6 +64,8 @@ export const fetchLeads = createAsyncThunk(
             due,
             ownerId,
             source,
+            startDate,
+            endDate,
             sortBy,
             sortOrder
         }: {
@@ -74,6 +76,8 @@ export const fetchLeads = createAsyncThunk(
             due?: string;
             ownerId?: string;
             source?: string;
+            startDate?: string;
+            endDate?: string;
             sortBy?: string;
             sortOrder?: 'asc' | 'desc';
         },
@@ -89,6 +93,8 @@ export const fetchLeads = createAsyncThunk(
             if (due) params.append('due', due);
             if (ownerId) params.append('ownerId', ownerId);
             if (source) params.append('source', source);
+            if (startDate) params.append('startDate', startDate);
+            if (endDate) params.append('endDate', endDate);
             if (sortBy) params.append('sortBy', sortBy);
             if (sortOrder) params.append('sortOrder', sortOrder);
 
@@ -218,11 +224,11 @@ const leadSlice = createSlice({
         builder.addCase(fetchLeads.fulfilled, (state, action) => {
             state.loading = false;
             const data = action.payload?.data || {};
-            const meta = data.meta || action.payload?.pagination || {};
-            state.leads = data.items || data.leads || [];
-            state.total = meta?.totalItems ?? meta?.total ?? 0;
+            const meta = data.meta || {};
+            state.leads = data.data || [];
+            state.total = meta?.total ?? 0;
             state.page = meta?.page ?? 1;
-            state.pages = meta?.totalPages ?? meta?.pages ?? 1;
+            state.totalPages = meta?.totalPages ?? 1;
         });
         builder.addCase(fetchLeads.rejected, (state, action) => {
             state.loading = false;

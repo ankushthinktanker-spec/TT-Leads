@@ -1,8 +1,12 @@
-import { useState, FormEvent } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { FormEvent, useState } from 'react';
+import { Eye, EyeOff, KeyRound, LogIn, ServerCrash } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import AuthShell from '../../components/auth/AuthShell';
+import InlineAlert from '../../components/ui/InlineAlert';
+import Button from '../../components/ui/Button';
 import { ROUTES } from '../../routes';
 import { useAppDispatch, useAppSelector } from '../../hooks/redux';
-import { login, clearError } from '../../store/slices/authSlice';
+import { clearError, login } from '../../store/slices/authSlice';
 
 export const LoginPage = () => {
     const navigate = useNavigate();
@@ -16,6 +20,7 @@ export const LoginPage = () => {
     const [rememberMe, setRememberMe] = useState(true);
     const [showPassword, setShowPassword] = useState(false);
     const [formError, setFormError] = useState<string | null>(null);
+    const isServerError = Boolean(error && /workspace server|try again/i.test(error));
 
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
@@ -42,149 +47,124 @@ export const LoginPage = () => {
     };
 
     return (
-        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 relative overflow-hidden">
-            <div className="absolute top-0 -left-20 w-96 h-96 bg-primary-500/10 rounded-full blur-[120px] animate-float"></div>
-            <div className="absolute bottom-0 -right-20 w-96 h-96 bg-blue-500/10 rounded-full blur-[120px] animate-float" style={{ animationDelay: '2s' }}></div>
-
-            <div className="w-full max-w-[440px] relative z-10">
-                <div className="text-center mb-10 group cursor-default">
-                    <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-primary-400 to-primary-600 rounded-2xl mb-6 shadow-2xl shadow-primary-500/20 group-hover:rotate-6 transition-transform duration-500">
-                        <svg
-                            className="w-9 h-9 text-slate-950"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                        >
-                            <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2.5}
-                                d="M13 10V3L4 14h7v7l9-11h-7z"
-                            />
-                        </svg>
-                    </div>
-                    <h1 className="text-4xl font-black text-slate-900 tracking-tight mb-2">
-                        THINK<span className="text-primary-500">TANKER</span>
-                    </h1>
-                    <p className="text-slate-500 font-semibold uppercase tracking-[0.2em] text-[10px]">Intelligence OS v1.0</p>
-                </div>
-
-                <div className="glass-card p-8 sm:p-10 border-white/10 shadow-2xl">
-                    <div className="mb-8">
-                        <h2 className="text-2xl font-bold text-slate-900 mb-1">Welcome back</h2>
-                        <p className="text-sm text-slate-500 font-medium">Sign in to continue.</p>
-                    </div>
-
-                    {(formError || error) && (
-                        <div className="alert-error mb-6">
-                            {formError || error}
-                        </div>
-                    )}
-
-                    <form onSubmit={handleSubmit} className="space-y-6">
+        <AuthShell
+            eyebrow="Workspace Access"
+            title="Welcome back"
+            description="Use your assigned workspace credentials to access pipeline, account, proposal, and renewal operations."
+            footer={(
+                <p className="text-center text-sm font-medium text-slate-500">
+                    Need access?{' '}
+                    <Link
+                        to={ROUTES.contactAdmin}
+                        className="font-semibold text-brand-600 transition-colors hover:text-brand-700"
+                    >
+                        Contact your operations team
+                    </Link>
+                </p>
+            )}
+        >
+            {(formError || error) && (
+                <div className="tt-animate-fade-up mb-6" style={{ animationDelay: '280ms' }}>
+                    <InlineAlert
+                        tone={isServerError ? 'danger' : 'warning'}
+                        title={isServerError ? 'Workspace server unavailable' : 'Access check required'}
+                    >
                         <div className="space-y-2">
-                            <label htmlFor="email" className="text-xs font-semibold uppercase tracking-widest text-slate-500 ml-1">
-                                Email
-                            </label>
-                            <input
-                                id="email"
-                                name="email"
-                                type="email"
-                                required
-                                className="input py-3.5"
-                                placeholder="name@company.com"
-                                value={formData.email}
-                                onChange={handleChange}
-                            />
-                        </div>
-
-                        <div className="space-y-2">
-                            <div className="flex justify-between items-center ml-1">
-                                <label htmlFor="password" className="text-xs font-semibold uppercase tracking-widest text-slate-500">
-                                    Password
-                                </label>
-                                <Link
-                                    to={ROUTES.forgotPassword}
-                                    className="text-[10px] text-primary-500 hover:text-primary-400 font-semibold uppercase tracking-widest"
-                                >
-                                    Forgot password
-                                </Link>
-                            </div>
-                            <div className="relative">
-                                <input
-                                    id="password"
-                                    name="password"
-                                    type={showPassword ? 'text' : 'password'}
-                                    required
-                                    className="input py-3.5 pr-12"
-                                    placeholder="Enter your password"
-                                    value={formData.password}
-                                    onChange={handleChange}
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => setShowPassword((prev) => !prev)}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] uppercase tracking-widest text-slate-500 hover:text-primary-400 font-bold"
-                                    aria-label={showPassword ? 'Hide password' : 'Show password'}
-                                >
-                                    {showPassword ? 'Hide' : 'Show'}
-                                </button>
-                            </div>
-                        </div>
-
-                        <div className="flex items-center gap-2 ml-1">
-                            <input
-                                type="checkbox"
-                                className="w-4 h-4 rounded border-slate-300 bg-white text-primary-500 focus:ring-primary-500/30"
-                                checked={rememberMe}
-                                onChange={(e) => setRememberMe(e.target.checked)}
-                            />
-                            <span className="text-xs text-slate-600 font-medium">Remember this device</span>
-                        </div>
-
-                        <button
-                            type="submit"
-                            disabled={loading}
-                            className="w-full btn btn-primary py-3.5 text-sm font-semibold tracking-wide group shadow-2xl shadow-primary-500/30"
-                            aria-busy={loading}
-                        >
-                            {loading ? (
-                                <span className="flex items-center gap-3">
-                                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                                    </svg>
-                                    Validating...
-                                </span>
+                            <div>{formError || error}</div>
+                            {isServerError ? (
+                                <div className="flex items-start gap-2 text-xs font-medium text-slate-600">
+                                    <ServerCrash size={14} className="mt-0.5 shrink-0" />
+                                    <span>Confirm the backend server is running and the local Vite proxy can reach `http://127.0.0.1:5000`.</span>
+                                </div>
                             ) : (
-                                <span className="flex items-center gap-2">
-                                    Sign in <span className="group-hover:translate-x-1 transition-transform">-&gt;</span>
-                                </span>
+                                <div className="flex items-start gap-2 text-xs font-medium text-slate-600">
+                                    <KeyRound size={14} className="mt-0.5 shrink-0" />
+                                    <span>If you are using the local bootstrap account, reset or create the admin user from the backend before retrying.</span>
+                                </div>
                             )}
-                        </button>
-                    </form>
+                        </div>
+                    </InlineAlert>
+                </div>
+            )}
 
-                    <div className="mt-8 pt-6 border-t border-slate-200 text-center">
-                        <p className="text-xs text-slate-500 font-medium">
-                            First time here?{' '}
-                            <Link
-                                to={ROUTES.contactAdmin}
-                                className="text-primary-500 hover:text-primary-400 font-bold underline decoration-primary-500/30 underline-offset-4"
-                            >
-                                Contact Ops
-                            </Link>
-                        </p>
+            <form onSubmit={handleSubmit} className="space-y-5 tt-animate-fade-up" style={{ animationDelay: '320ms' }}>
+                <div className="space-y-2 tt-animate-fade-up" style={{ animationDelay: '360ms' }}>
+                    <label htmlFor="email" className="form-label">Work Email</label>
+                    <input
+                        id="email"
+                        name="email"
+                        type="email"
+                        required
+                        className="input h-12 rounded-2xl"
+                        placeholder="name@company.com"
+                        value={formData.email}
+                        onChange={handleChange}
+                    />
+                </div>
+
+                <div className="space-y-2 tt-animate-fade-up" style={{ animationDelay: '420ms' }}>
+                    <div className="flex items-center justify-between gap-3">
+                        <label htmlFor="password" className="form-label mb-0">Password</label>
+                        <Link
+                            to={ROUTES.forgotPassword}
+                            className="text-[12px] font-semibold text-brand-600 transition-colors hover:text-brand-700"
+                        >
+                            Forgot password?
+                        </Link>
+                    </div>
+                    <div className="relative">
+                        <input
+                            id="password"
+                            name="password"
+                            type={showPassword ? 'text' : 'password'}
+                            required
+                            className="input h-12 rounded-2xl pr-12"
+                            placeholder="Enter your password"
+                            value={formData.password}
+                            onChange={handleChange}
+                        />
+                        <button
+                            type="button"
+                            onClick={() => setShowPassword((prev) => !prev)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 rounded-xl p-2 text-slate-400 transition-colors hover:bg-brand-50 hover:text-brand-600"
+                            aria-label={showPassword ? 'Hide password' : 'Show password'}
+                        >
+                            {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                        </button>
                     </div>
                 </div>
 
-                <div className="mt-8 text-center">
-                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-[0.3em]">
-                        (c) 2025 ThinkTanker // Advanced Analytics System
-                    </p>
-                </div>
-            </div>
-        </div>
+                <label
+                    className="tt-animate-fade-up flex items-center gap-3 rounded-2xl border border-brand-100 bg-brand-50/50 px-4 py-3 text-sm font-medium text-slate-600"
+                    style={{ animationDelay: '500ms' }}
+                >
+                    <input
+                        id="remember"
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500/20"
+                        checked={rememberMe}
+                        onChange={(e) => setRememberMe(e.target.checked)}
+                    />
+                    Remember this device for 30 days
+                </label>
+
+                <Button
+                    type="submit"
+                    disabled={loading}
+                    size="lg"
+                    className="tt-animate-fade-up w-full rounded-2xl"
+                    style={{ animationDelay: '560ms' }}
+                >
+                    {loading ? 'Verifying access...' : (
+                        <>
+                            <LogIn size={16} />
+                            Sign In
+                        </>
+                    )}
+                </Button>
+            </form>
+        </AuthShell>
     );
 };
 
-
+export default LoginPage;

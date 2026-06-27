@@ -43,9 +43,13 @@ export class QueueService {
     }
 
     /**
-     * Private runner to simulate a separate worker thread until Redis is introduced.
+     * Private runner with exponential-backoff retry (up to MAX_ATTEMPTS).
+     * Uses setImmediate to yield the event loop before each attempt so the
+     * HTTP response is never blocked by job execution.
      */
-    private async runInBackground<T extends JobType>(type: T, payload: JobPayload[T]): Promise<void> {
+    private runInBackground<T extends JobType>(type: T, payload: JobPayload[T], attempt = 1): void {
+        const MAX_ATTEMPTS = 3;
+
         setImmediate(async () => {
             try {
                 await this.eventBus.publish(createQueueJobStartedEvent({
@@ -53,18 +57,28 @@ export class QueueService {
                     tenantId: this.resolveTenantId(payload)
                 }));
                 await JobProcessor.handleJob(type, payload);
-                console.info(`[Queue] Job ${type} finished successfully.`);
+                console.info(`[Queue] Job ${type} completed successfully (attempt ${attempt}/${MAX_ATTEMPTS}).`);
                 await this.eventBus.publish(createQueueJobCompletedEvent({
                     jobType: type,
                     tenantId: this.resolveTenantId(payload)
                 }));
             } catch (error) {
-                console.error(`[Queue] CRITICAL: Job ${type} failed to execute in background!`, error);
-                await this.eventBus.publish(createQueueJobFailedEvent({
-                    jobType: type,
-                    tenantId: this.resolveTenantId(payload),
-                    errorMessage: error instanceof Error ? error.message : 'Unknown queue error'
-                }));
+                const errorMessage = error instanceof Error ? error.message : 'Unknown queue error';
+                console.error(`[Queue] Job ${type} failed on attempt ${attempt}/${MAX_ATTEMPTS}: ${errorMessage}`);
+
+                if (attempt < MAX_ATTEMPTS) {
+                    // Exponential backoff: 500 ms, 1000 ms
+                    const delayMs = Math.pow(2, attempt - 1) * 500;
+                    console.info(`[Queue] Retrying job ${type} in ${delayMs} ms...`);
+                    setTimeout(() => this.runInBackground(type, payload, attempt + 1), delayMs);
+                } else {
+                    console.error(`[Queue] CRITICAL: Job ${type} permanently failed after ${MAX_ATTEMPTS} attempts.`);
+                    await this.eventBus.publish(createQueueJobFailedEvent({
+                        jobType: type,
+                        tenantId: this.resolveTenantId(payload),
+                        errorMessage
+                    }));
+                }
             }
         });
     }

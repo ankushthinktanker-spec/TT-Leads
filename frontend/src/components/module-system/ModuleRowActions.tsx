@@ -32,8 +32,17 @@ const ModuleRowActions = ({ primaryAction, actions }: ModuleRowActionsProps) => 
                 setOpen(false);
             }
         };
+        const keyHandler = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                setOpen(false);
+            }
+        };
         document.addEventListener('mousedown', handler);
-        return () => document.removeEventListener('mousedown', handler);
+        document.addEventListener('keydown', keyHandler);
+        return () => {
+            document.removeEventListener('mousedown', handler);
+            document.removeEventListener('keydown', keyHandler);
+        };
     }, [open]);
 
     return (
@@ -42,6 +51,7 @@ const ModuleRowActions = ({ primaryAction, actions }: ModuleRowActionsProps) => 
                 <button
                     className={`mod-row-actions__btn mod-row-actions__btn--${primaryAction.variant || 'primary'}`}
                     title={primaryAction.label}
+                    aria-label={primaryAction.label}
                     onClick={primaryAction.onClick}
                 >
                     {primaryAction.icon}
@@ -54,17 +64,22 @@ const ModuleRowActions = ({ primaryAction, actions }: ModuleRowActionsProps) => 
                         className="mod-row-actions__btn"
                         onClick={() => setOpen(!open)}
                         title="More actions"
+                        aria-label="More actions"
+                        aria-haspopup="menu"
+                        aria-expanded={open}
                     >
                         <MoreHorizontal size={15} />
                     </button>
 
                     {open && (
-                        <div className="mod-row-actions__dropdown">
+                        <div className="mod-row-actions__dropdown" role="menu">
                             {actions.map((action, i) => (
                                 <div key={i}>
                                     {action.divider && <div className="mod-row-actions__dropdown-divider" />}
                                     <button
                                         className={`mod-row-actions__dropdown-item ${action.danger ? 'mod-row-actions__dropdown-item--danger' : ''}`}
+                                        aria-label={action.label}
+                                        role="menuitem"
                                         onClick={() => {
                                             setOpen(false);
                                             action.onClick();

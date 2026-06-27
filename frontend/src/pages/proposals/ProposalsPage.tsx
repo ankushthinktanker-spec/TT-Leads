@@ -4,12 +4,14 @@ import { FileText, Plus, Trash2, Eye, Inbox, FileCheck2, FileWarning, TimerReset
 import { useAppDispatch, useAppSelector } from '../../hooks/redux';
 import { deleteProposal, fetchProposals } from '../../store/slices/proposalSlice';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import { useGlobalSearch } from '../../context/GlobalSearchContext';
 import { ROUTES } from '../../routes';
 import { showToast } from '../../utils/toast';
 import {
     ModulePageShell,
     ModulePageHeader,
     ModuleToolbar,
+    ModuleFilterDropdown,
     ModuleSummaryCards,
     ModuleDataTable,
     ModuleBadge,
@@ -19,10 +21,11 @@ import {
     type SummaryCardItem,
 } from '../../components/module-system';
 
-const statusVariant = (status: string): 'neutral' | 'success' | 'warning' | 'danger' => {
+const statusVariant = (status: string): 'neutral' | 'success' | 'warning' | 'danger' | 'info' => {
     switch (status) {
         case 'Draft': return 'neutral';
         case 'Sent': return 'warning';
+        case 'Under Review': return 'info';
         case 'Accepted': return 'success';
         case 'Rejected': return 'danger';
         default: return 'neutral';
@@ -38,29 +41,46 @@ export const ProposalsPage = () => {
     const navigate = useNavigate();
     const dispatch = useAppDispatch();
     const { proposals, loading, error, pagination } = useAppSelector((state) => state.proposals);
-    const { total, pages } = pagination;
+    const { total, totalPages: pages } = pagination;
+    const { value: query, setValue: setQuery } = useGlobalSearch();
 
-    const [query, setQuery] = useState('');
     const [status, setStatus] = useState('');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
     const [page, setPage] = useState(1);
     const [deleteId, setDeleteId] = useState<string | null>(null);
 
     useEffect(() => {
-        dispatch(fetchProposals({
-            page,
-            limit: 20,
-            search: query,
-            status,
-            sortBy: 'createdAt',
-            sortOrder
-        }));
+        const timer = setTimeout(() => {
+            dispatch(fetchProposals({
+                page,
+                limit: 20,
+                search: query,
+                status,
+                sortBy: 'createdAt',
+                sortOrder
+            }));
+        }, 300);
+        return () => clearTimeout(timer);
     }, [dispatch, page, query, status, sortOrder]);
 
     const activeFilters: ActiveFilter[] = [
         ...(query.trim() ? [{ key: 'search', label: `Search: "${query.trim()}"`, onRemove: () => setQuery('') }] : []),
         ...(status ? [{ key: 'status', label: `Status: ${status}`, onRemove: () => setStatus('') }] : []),
         ...(sortOrder !== 'desc' ? [{ key: 'sort', label: `Sort: Oldest first`, onRemove: () => setSortOrder('desc') }] : []),
+    ];
+
+    const statusOptions = [
+        { value: '', label: 'All statuses' },
+        { value: 'Draft', label: 'Draft' },
+        { value: 'Sent', label: 'Sent' },
+        { value: 'Under Review', label: 'Under Review' },
+        { value: 'Accepted', label: 'Accepted' },
+        { value: 'Rejected', label: 'Rejected' },
+    ];
+
+    const sortOptions = [
+        { value: 'desc', label: 'Newest first' },
+        { value: 'asc', label: 'Oldest first' },
     ];
 
     const draftCount = proposals.filter((proposal) => proposal.status === 'Draft').length;
@@ -77,10 +97,14 @@ export const ProposalsPage = () => {
 
     const confirmDelete = async () => {
         if (!deleteId) return;
-        await dispatch(deleteProposal(deleteId));
-        setDeleteId(null);
-        dispatch(fetchProposals({ page, limit: 20, search: query, status, sortBy: 'createdAt', sortOrder }));
-        showToast('Proposal deleted successfully.', 'success');
+        try {
+            await dispatch(deleteProposal(deleteId)).unwrap();
+            setDeleteId(null);
+            dispatch(fetchProposals({ page, limit: 20, search: query, status, sortBy: 'createdAt', sortOrder }));
+            showToast('Proposal deleted successfully.', 'success');
+        } catch {
+            showToast('Failed to delete proposal.', 'error');
+        }
     };
 
     const summaryCards: SummaryCardItem[] = [
@@ -194,7 +218,7 @@ export const ProposalsPage = () => {
     return (
         <ModulePageShell>
             <ModulePageHeader
-                eyebrow="CRM · Proposals"
+                eyebrow="CRM / Proposals"
                 title="Proposals"
                 description="Track commercial documents, review value concentration, and move proposals through a consistent CRM workflow."
                 actions={
@@ -218,49 +242,27 @@ export const ProposalsPage = () => {
                 totalCount={total}
                 countLabel="proposals"
             >
-                <select
-                    className="mod-toolbar__select"
+                <ModuleFilterDropdown
+                    ariaLabel="Filter proposals by status"
                     value={status}
-                    onChange={(e) => setStatus(e.target.value)}
-                >
-                    <option value="">All statuses</option>
-                    <option value="Draft">Draft</option>
-                    <option value="Sent">Sent</option>
-                    <option value="Accepted">Accepted</option>
-                    <option value="Rejected">Rejected</option>
-                </select>
+                    options={statusOptions}
+                    onChange={setStatus}
+                />
 
-                <select
-                    className="mod-toolbar__select"
+                <ModuleFilterDropdown
+                    ariaLabel="Sort proposals"
                     value={sortOrder}
-                    onChange={(e) => setSortOrder(e.target.value as 'asc' | 'desc')}
-                >
-                    <option value="desc">Newest first</option>
-                    <option value="asc">Oldest first</option>
-                </select>
+                    options={sortOptions}
+                    onChange={(nextValue) => setSortOrder(nextValue as 'asc' | 'desc')}
+                />
             </ModuleToolbar>
-
-            {error && (
-                <div style={{
-                    padding: '12px 16px',
-                    background: 'var(--mod-danger-light)',
-                    border: '1px solid #fecaca',
-                    borderRadius: 'var(--mod-radius-lg)',
-                    color: 'var(--mod-danger-text)',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    marginBottom: 16
-                }}>
-                    {error}
-                </div>
-            )}
 
             <ModuleDataTable
                 rows={proposals}
                 columns={columns}
                 rowKey={(proposal) => proposal._id}
                 loading={loading}
-                error={null}
+                error={error}
                 tableTitle="Commercial Pipeline"
                 tableBadge={`${proposals.length} visible`}
                 emptyTitle="No proposals yet"
@@ -278,6 +280,14 @@ export const ProposalsPage = () => {
                 totalPages={pages}
                 totalItems={total}
                 onPageChange={setPage}
+                onRetry={() => dispatch(fetchProposals({
+                    page,
+                    limit: 20,
+                    search: query,
+                    status,
+                    sortBy: 'createdAt',
+                    sortOrder
+                }))}
                 onRowClick={(proposal) => navigate(`${ROUTES.proposals}/${proposal._id}`)}
             />
 

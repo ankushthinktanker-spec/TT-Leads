@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useAppDispatch } from '../../hooks/redux';
 import { createCompany } from '../../store/slices/companySlice';
 import { showToast } from '../../utils/toast';
+import { getErrorMessage } from '../../utils/error';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 import { FormLabel, TextInput, SelectInput } from '../ui/Form';
@@ -20,6 +21,14 @@ interface QuickCompanyPayload {
     email?: string;
     phone?: string;
     website?: string;
+}
+
+interface QuickCompanyResponse {
+    data?: {
+        company?: {
+            _id: string;
+        };
+    };
 }
 
 const QuickAddCompanyModal = ({ onClose, onSuccess }: QuickAddCompanyModalProps) => {
@@ -63,13 +72,17 @@ const QuickAddCompanyModal = ({ onClose, onSuccess }: QuickAddCompanyModalProps)
             if (trimmed.phone) payload.phone = trimmed.phone;
             if (trimmed.website) payload.website = trimmed.website;
 
-            const result = await dispatch(createCompany(payload)).unwrap();
+            const result = await dispatch(createCompany(payload)).unwrap() as QuickCompanyResponse;
+
+            if (!result.data?.company?._id) {
+                throw new Error('Company creation response was missing the company id');
+            }
 
             onSuccess(result.data.company._id, formData.name);
             onClose();
         } catch (error) {
             console.error('Failed to create company:', error);
-            showToast('Failed to create company. Please try again.', 'error');
+            showToast(getErrorMessage(error, 'Failed to create company. Please try again.'), 'error');
         } finally {
             setLoading(false);
         }
@@ -92,6 +105,11 @@ const QuickAddCompanyModal = ({ onClose, onSuccess }: QuickAddCompanyModalProps)
             )}
         >
             <form onSubmit={handleSubmit} className="space-y-4" id="quick-company-form">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <p className="text-sm font-semibold text-slate-900">Create a lightweight company record without leaving the current workflow.</p>
+                    <p className="mt-1 text-xs text-slate-500">You can complete the full profile later from the company detail page.</p>
+                </div>
+
                 <div>
                     <FormLabel>
                         Company Name <span className="text-red-500">*</span>
@@ -142,6 +160,17 @@ const QuickAddCompanyModal = ({ onClose, onSuccess }: QuickAddCompanyModalProps)
                         value={formData.phone}
                         onChange={handleChange}
                         placeholder="+91 1234567890"
+                    />
+                </div>
+
+                <div>
+                    <FormLabel>Website</FormLabel>
+                    <TextInput
+                        type="url"
+                        name="website"
+                        value={formData.website}
+                        onChange={handleChange}
+                        placeholder="https://acme.com"
                     />
                 </div>
             </form>

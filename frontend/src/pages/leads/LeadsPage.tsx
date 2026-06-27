@@ -8,12 +8,14 @@ import { useAppDispatch, useAppSelector } from '../../hooks/redux';
 import { fetchLeads, deleteLead } from '../../store/slices/leadSlice';
 import { fetchUsers } from '../../store/slices/userSlice';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import { useGlobalSearch } from '../../context/GlobalSearchContext';
 import { ROUTES } from '../../routes';
 import { showToast } from '../../utils/toast';
 import {
     ModulePageShell,
     ModulePageHeader,
     ModuleToolbar,
+    ModuleFilterDropdown,
     ModuleSummaryCards,
     ModuleDataTable,
     ModuleBadge,
@@ -25,7 +27,7 @@ import {
 
 /* ─── Helpers ─── */
 const formatDate = (value?: string) => {
-    if (!value) return '—';
+    if (!value) return '-';
     return new Date(value).toLocaleString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
 };
 
@@ -44,15 +46,30 @@ const statusConfig: Record<string, { variant: 'neutral' | 'success' | 'warning' 
 const avatarColors = ['blue', 'green', 'purple', 'orange'] as const;
 const getAvatarColor = (name: string) => avatarColors[name.charCodeAt(0) % avatarColors.length];
 
+const getDateRangeParams = (range: string): { startDate?: string; endDate?: string } => {
+    if (!range) return {};
+    const days = Number(range);
+    if (!Number.isFinite(days) || days <= 0) return {};
+
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(endDate.getDate() - days);
+
+    return {
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString()
+    };
+};
+
 /* ─── Page Component ─── */
 export const LeadsPage = () => {
     const dispatch = useAppDispatch();
     const navigate = useNavigate();
 
-    const { leads, loading, error, page, pages, total } = useAppSelector((s) => s.leads);
+    const { leads, loading, error, page, totalPages, total } = useAppSelector((s) => s.leads);
     const { users } = useAppSelector((s) => s.users);
+    const { value: query, setValue: setQuery } = useGlobalSearch();
 
-    const [query, setQuery] = useState('');
     const [status, setStatus] = useState('');
     const [ownerId, setOwnerId] = useState('');
     const [source, setSource] = useState('');
@@ -63,16 +80,48 @@ export const LeadsPage = () => {
     useEffect(() => { dispatch(fetchUsers({ limit: 100 })); }, [dispatch]);
 
     useEffect(() => {
-        dispatch(fetchLeads({
-            page: 1, limit: 20, search: query, status, ownerId, source,
-            sortBy: 'createdAt', sortOrder,
-        }));
+        const timer = setTimeout(() => {
+            const dateRangeParams = getDateRangeParams(dateRange);
+            dispatch(fetchLeads({
+                page: 1, limit: 20, search: query, status, ownerId, source,
+                ...dateRangeParams,
+                sortBy: 'createdAt', sortOrder,
+            }));
+        }, 300);
+        return () => clearTimeout(timer);
     }, [dispatch, query, status, ownerId, source, dateRange, sortOrder]);
 
     const uniqueSources = useMemo(() =>
         Array.from(new Set(leads.map((l) => l.source).filter(Boolean))).sort(),
         [leads]
     );
+
+    const sourceOptions = [
+        { value: '', label: 'All sources' },
+        ...uniqueSources.map((item) => ({ value: item, label: item })),
+    ];
+
+    const dateRangeOptions = [
+        { value: '', label: 'All time' },
+        { value: '7', label: 'Last 7 days' },
+        { value: '30', label: 'Last 30 days' },
+        { value: '90', label: 'Last 90 days' },
+    ];
+
+    const statusOptions = [
+        { value: '', label: 'All statuses' },
+        { value: 'New', label: 'New' },
+        { value: 'Contacted', label: 'Contacted' },
+        { value: 'Qualified', label: 'Qualified' },
+        { value: 'Proposal Sent', label: 'Proposal Sent' },
+        { value: 'Won', label: 'Won' },
+        { value: 'Lost', label: 'Lost' },
+    ];
+
+    const ownerOptions = [
+        { value: '', label: 'All owners' },
+        ...users.map((user) => ({ value: user._id, label: `${user.firstName} ${user.lastName}`.trim() })),
+    ];
 
     /* ─── Metrics ─── */
     const activeLeads = leads.filter((l) => !['Won', 'Lost'].includes(l.status)).length;
@@ -122,9 +171,13 @@ export const LeadsPage = () => {
 
     const confirmDelete = async () => {
         if (!deleteId) return;
-        await dispatch(deleteLead(deleteId));
-        setDeleteId(null);
-        showToast('Lead deleted successfully.', 'success');
+        try {
+            await dispatch(deleteLead(deleteId)).unwrap();
+            setDeleteId(null);
+            showToast('Lead deleted successfully.', 'success');
+        } catch {
+            showToast('Failed to delete lead.', 'error');
+        }
     };
 
     /* ─── Summary Cards ─── */
@@ -159,7 +212,7 @@ export const LeadsPage = () => {
                                 {lead.firstName} {lead.lastName}
                             </div>
                             <div className="mod-table__secondary-text">
-                                {lead.company || 'Direct'} · {lead.source || '—'}
+                                {lead.company || 'Direct'} - {lead.source || '-'}
                             </div>
                         </div>
                     </button>
@@ -197,7 +250,7 @@ export const LeadsPage = () => {
             header: 'Follow-up',
             width: '15%',
             cell: (lead) => {
-                if (!lead.nextFollowUpDate) return <span style={{ color: 'var(--mod-text-subtle)' }}>—</span>;
+                if (!lead.nextFollowUpDate) return <span style={{ color: 'var(--mod-text-subtle)' }}>-</span>;
                 const isPast = new Date(lead.nextFollowUpDate) < new Date();
                 return (
                     <div>
@@ -276,7 +329,7 @@ export const LeadsPage = () => {
         <ModulePageShell>
             {/* ─── Page Header ─── */}
             <ModulePageHeader
-                eyebrow="CRM · Leads"
+                eyebrow="CRM / Leads"
                 title="Leads"
                 description="Track ownership, qualification progress, and follow-up activity across your pipeline."
                 actions={
@@ -319,112 +372,70 @@ export const LeadsPage = () => {
                     <>
                         <div>
                             <label className="mod-filter-panel__field-label">Lead Source</label>
-                            <select
-                                className="mod-toolbar__select"
-                                style={{ width: '100%' }}
+                            <ModuleFilterDropdown
+                                ariaLabel="Filter leads by source"
+                                fullWidth
                                 value={source}
-                                onChange={(e) => setSource(e.target.value)}
-                            >
-                                <option value="">All sources</option>
-                                {uniqueSources.map((s) => <option key={s} value={s}>{s}</option>)}
-                            </select>
+                                options={sourceOptions}
+                                onChange={setSource}
+                            />
                         </div>
                         <div>
                             <label className="mod-filter-panel__field-label">Created Within</label>
-                            <select
-                                className="mod-toolbar__select"
-                                style={{ width: '100%' }}
+                            <ModuleFilterDropdown
+                                ariaLabel="Filter leads by created date range"
+                                fullWidth
                                 value={dateRange}
-                                onChange={(e) => setDateRange(e.target.value)}
-                            >
-                                <option value="">All time</option>
-                                <option value="7">Last 7 days</option>
-                                <option value="30">Last 30 days</option>
-                                <option value="90">Last 90 days</option>
-                            </select>
+                                options={dateRangeOptions}
+                                onChange={setDateRange}
+                            />
                         </div>
                         <div>
                             <label className="mod-filter-panel__field-label">Status</label>
-                            <select
-                                className="mod-toolbar__select"
-                                style={{ width: '100%' }}
+                            <ModuleFilterDropdown
+                                ariaLabel="Filter leads by status"
+                                fullWidth
                                 value={status}
-                                onChange={(e) => setStatus(e.target.value)}
-                            >
-                                <option value="">All statuses</option>
-                                <option value="New">New</option>
-                                <option value="Contacted">Contacted</option>
-                                <option value="Qualified">Qualified</option>
-                                <option value="Proposal Sent">Proposal Sent</option>
-                                <option value="Won">Closed-Won</option>
-                                <option value="Lost">Lost</option>
-                            </select>
+                                options={statusOptions}
+                                onChange={setStatus}
+                            />
                         </div>
                         <div>
                             <label className="mod-filter-panel__field-label">Owner</label>
-                            <select
-                                className="mod-toolbar__select"
-                                style={{ width: '100%' }}
+                            <ModuleFilterDropdown
+                                ariaLabel="Filter leads by owner"
+                                fullWidth
                                 value={ownerId}
-                                onChange={(e) => setOwnerId(e.target.value)}
-                            >
-                                <option value="">All assignees</option>
-                                {users.map((u) => (
-                                    <option key={u._id} value={u._id}>{u.firstName} {u.lastName}</option>
-                                ))}
-                            </select>
+                                options={ownerOptions}
+                                onChange={setOwnerId}
+                            />
                         </div>
                     </>
                 }
             >
                 {/* Inline quick filters */}
-                <select
-                    className="mod-toolbar__select"
+                <ModuleFilterDropdown
+                    ariaLabel="Quick status filter"
                     value={status}
-                    onChange={(e) => setStatus(e.target.value)}
-                >
-                    <option value="">All statuses</option>
-                    <option value="New">New</option>
-                    <option value="Contacted">Contacted</option>
-                    <option value="Qualified">Qualified</option>
-                    <option value="Proposal Sent">Proposal Sent</option>
-                    <option value="Won">Won</option>
-                    <option value="Lost">Lost</option>
-                </select>
+                    options={statusOptions}
+                    onChange={setStatus}
+                />
 
-                <select
-                    className="mod-toolbar__select"
+                <ModuleFilterDropdown
+                    ariaLabel="Quick owner filter"
                     value={ownerId}
-                    onChange={(e) => setOwnerId(e.target.value)}
-                >
-                    <option value="">All owners</option>
-                    {users.map((u) => (
-                        <option key={u._id} value={u._id}>{u.firstName} {u.lastName}</option>
-                    ))}
-                </select>
+                    options={ownerOptions}
+                    onChange={setOwnerId}
+                />
             </ModuleToolbar>
 
             {/* ─── Data Table ─── */}
-            {error && (
-                <div style={{
-                    padding: '12px 16px',
-                    background: 'var(--mod-danger-light)',
-                    border: '1px solid #fecaca',
-                    borderRadius: 'var(--mod-radius-lg)',
-                    color: 'var(--mod-danger-text)',
-                    fontSize: 13,
-                    fontWeight: 600,
-                }}>
-                    {error}
-                </div>
-            )}
-
             <ModuleDataTable
                 rows={leads}
                 columns={columns}
                 rowKey={(lead) => lead._id}
                 loading={loading}
-                error={null}
+                error={error}
                 tableTitle="Lead Pipeline"
                 tableBadge={`${leads.length} visible`}
                 emptyTitle="No leads yet"
@@ -439,13 +450,31 @@ export const LeadsPage = () => {
                     </button>
                 }
                 page={page}
-                totalPages={pages}
+                totalPages={totalPages}
                 totalItems={total}
-                onPageChange={(nextPage) => dispatch(fetchLeads({
-                    page: nextPage, limit: 20, search: query,
-                    status, ownerId, source,
-                    sortBy: 'createdAt', sortOrder,
-                }))}
+                onPageChange={(nextPage) => {
+                    const dateRangeParams = getDateRangeParams(dateRange);
+                    dispatch(fetchLeads({
+                        page: nextPage, limit: 20, search: query,
+                        status, ownerId, source,
+                        ...dateRangeParams,
+                        sortBy: 'createdAt', sortOrder,
+                    }));
+                }}
+                onRetry={() => {
+                    const dateRangeParams = getDateRangeParams(dateRange);
+                    dispatch(fetchLeads({
+                        page,
+                        limit: 20,
+                        search: query,
+                        status,
+                        ownerId,
+                        source,
+                        ...dateRangeParams,
+                        sortBy: 'createdAt',
+                        sortOrder,
+                    }));
+                }}
                 onRowClick={(lead) => navigate(`${ROUTES.leads}/${lead._id}`)}
             />
 

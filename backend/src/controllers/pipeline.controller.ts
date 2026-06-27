@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import mongoose from 'mongoose';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { AppError } from '../middleware/errorHandler';
+import { Roles } from '../constants/roles';
 import { addPipelineStageSchema, createPipelineSchema, reorderPipelineStagesSchema, updatePipelineSchema, updatePipelineStageSchema } from '../validators/pipeline.validator';
 import { buildPaginationMeta, getPaginationParams } from '../utils/pagination';
 import { applySearchFilter, getDateRangeParam, getSearchTerm, getStringParam } from '../utils/queryFilters';
@@ -14,7 +15,7 @@ const buildPipelineFilter = (req: AuthRequest): PipelineFilter => {
     const filter: PipelineFilter = {};
     const user = req.user!;
 
-    if (user.role !== 'Admin' && user.role !== 'Manager') {
+    if (user.role !== Roles.ADMIN && user.role !== Roles.MANAGER) {
         filter.$or = [
             { access: 'all' },
             { createdBy: user._id },
@@ -40,7 +41,7 @@ const buildPipelineFilter = (req: AuthRequest): PipelineFilter => {
 
 const canAccessPipeline = (pipeline: { access?: string; selectedUserIds?: mongoose.Types.ObjectId[]; createdBy?: mongoose.Types.ObjectId }, user: AuthRequest['user']) => {
     if (!user) return false;
-    if (user.role === 'Admin' || user.role === 'Manager') return true;
+    if (user.role === Roles.ADMIN || user.role === Roles.MANAGER) return true;
     if (pipeline.access === 'all') return true;
     if (pipeline.createdBy?.toString() === user._id.toString()) return true;
     return pipeline.selectedUserIds?.some((id) => id.toString() === user._id.toString()) || false;
@@ -62,7 +63,7 @@ export const getPipelines = async (req: AuthRequest, res: Response, next: NextFu
         res.status(200).json({
             success: true,
             data: {
-                items,
+                data: items,
                 meta: buildPaginationMeta(page, limit, total)
             }
         });
@@ -99,7 +100,7 @@ export const getPipeline = async (req: AuthRequest, res: Response, next: NextFun
 // @access  Private
 export const createPipelineHandler = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const { error, value } = createPipelineSchema.validate(req.body);
+        const { error, value } = createPipelineSchema.validate(req.body, { stripUnknown: true });
         if (error) {
             throw new AppError(error.details[0].message, 400);
         }
@@ -130,7 +131,7 @@ export const updatePipelineHandler = async (req: AuthRequest, res: Response, nex
             throw new AppError('Invalid pipeline identifier', 400);
         }
 
-        const { error, value } = updatePipelineSchema.validate(req.body);
+        const { error, value } = updatePipelineSchema.validate(req.body, { stripUnknown: true });
         if (error) {
             throw new AppError(error.details[0].message, 400);
         }
@@ -188,7 +189,7 @@ export const addPipelineStageHandler = async (req: AuthRequest, res: Response, n
         if (!mongoose.isValidObjectId(req.params.id)) {
             throw new AppError('Invalid pipeline identifier', 400);
         }
-        const { error, value } = addPipelineStageSchema.validate(req.body);
+        const { error, value } = addPipelineStageSchema.validate(req.body, { stripUnknown: true });
         if (error) {
             throw new AppError(error.details[0].message, 400);
         }
@@ -220,7 +221,7 @@ export const updatePipelineStageHandler = async (req: AuthRequest, res: Response
         if (!mongoose.isValidObjectId(req.params.id) || !mongoose.isValidObjectId(req.params.stageId)) {
             throw new AppError('Invalid identifier', 400);
         }
-        const { error, value } = updatePipelineStageSchema.validate(req.body);
+        const { error, value } = updatePipelineStageSchema.validate(req.body, { stripUnknown: true });
         if (error) {
             throw new AppError(error.details[0].message, 400);
         }
@@ -280,7 +281,7 @@ export const reorderPipelineStagesHandler = async (req: AuthRequest, res: Respon
         if (!mongoose.isValidObjectId(req.params.id)) {
             throw new AppError('Invalid pipeline identifier', 400);
         }
-        const { error, value } = reorderPipelineStagesSchema.validate(req.body);
+        const { error, value } = reorderPipelineStagesSchema.validate(req.body, { stripUnknown: true });
         if (error) {
             throw new AppError(error.details[0].message, 400);
         }
