@@ -77,6 +77,13 @@ export class LeadAssignmentService {
     }) {
         const { leadId, assignedTo, tenantId, actorId, ip } = params;
 
+        if (!mongoose.isValidObjectId(leadId)) {
+            throw new AppError('Invalid lead identifier', 400);
+        }
+        if (!mongoose.isValidObjectId(assignedTo)) {
+            throw new AppError('Invalid user identifier', 400);
+        }
+
         const lead = await Lead.findOne({ _id: leadId, tenantId });
         if (!lead) {
             throw new AppError('Lead not found or unauthorized access', 404);

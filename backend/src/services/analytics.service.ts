@@ -136,6 +136,7 @@ export class AnalyticsService {
         //  avgResponse, sourcePerformance, teamPerformance, wonTrend,
         //  thisMonthWeighted, nextMonthPipeline, duplicateLeads, leadsForAging)
         // ------------------------------------------------------------------
+        // PERF-5: allowDiskUse prevents OOM crash when tenant has >100k leads
         const leadFacetPromise = Lead.aggregate([
             { $match: leadFilter },
             {
@@ -268,7 +269,7 @@ export class AnalyticsService {
                     ]
                 }
             }
-        ]);
+        ]).allowDiskUse(true);
 
         // ------------------------------------------------------------------
         // OPTIMIZED: Single $facet replaces 3 separate Task queries
@@ -366,7 +367,7 @@ export class AnalyticsService {
                 },
                 { $match: { meetings: { $size: 0 } } },
                 { $project: { _id: 1, status: 1, assignedTo: 1, priority: 1 } }
-            ]),
+            ]).allowDiskUse(true),
             Activity.find({ ...activityOwnerFilter })
                 .sort({ activityDate: -1 })
                 .limit(20),

@@ -73,11 +73,17 @@ export class QueueService {
                     setTimeout(() => this.runInBackground(type, payload, attempt + 1), delayMs);
                 } else {
                     console.error(`[Queue] CRITICAL: Job ${type} permanently failed after ${MAX_ATTEMPTS} attempts.`);
-                    await this.eventBus.publish(createQueueJobFailedEvent({
-                        jobType: type,
-                        tenantId: this.resolveTenantId(payload),
-                        errorMessage
-                    }));
+                    try {
+                        await this.eventBus.publish(createQueueJobFailedEvent({
+                            jobType: type,
+                            tenantId: this.resolveTenantId(payload),
+                            errorMessage
+                        }));
+                    } catch (publishError) {
+                        // Prevent an event-bus failure from becoming an unhandled rejection
+                        // that could crash the Node.js process (Node 15+).
+                        console.error(`[Queue] Failed to publish job-failed event for ${type}:`, publishError);
+                    }
                 }
             }
         });

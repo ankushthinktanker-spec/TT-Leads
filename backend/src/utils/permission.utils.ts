@@ -223,13 +223,14 @@ function setCachedPermissions(key: string, value: RolePermissions): void {
     permissionCache.set(key, { value, expiresAt: Date.now() + PERMISSION_CACHE_TTL_MS });
 }
 
-// Periodic cleanup to prevent unbounded memory growth
+// Cleanup at TTL/2 so entries never linger more than 1.5× TTL in memory.
+// Previously 120 000 ms (2× TTL) caused stale entries to live up to 180 s.
 setInterval(() => {
     const now = Date.now();
     for (const [key, entry] of permissionCache) {
         if (now > entry.expiresAt) permissionCache.delete(key);
     }
-}, 120_000);
+}, PERMISSION_CACHE_TTL_MS / 2).unref();
 
 export const getEffectivePermissions = async (role: string, tenantId?: string): Promise<RolePermissions> => {
     const defaults = DEFAULT_ROLE_PERMISSIONS[role] || emptyPermissions();

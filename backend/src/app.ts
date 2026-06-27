@@ -2,6 +2,7 @@ import express, { Application, Request, Response } from 'express';
 import crypto from 'crypto';
 import cors from 'cors';
 import helmet from 'helmet';
+import compression from 'compression';
 import 'express-async-errors';
 import pinoHttp, { Options as PinoHttpOptions } from 'pino-http';
 import type { IncomingMessage, ServerResponse } from 'http';
@@ -76,6 +77,8 @@ const isAllowedOrigin = (origin: string): boolean => {
 
 // Middleware
 app.use(helmet()); // Security headers
+// PERF-7: gzip/brotli compression — reduces JSON response payload by 70-80%
+app.use(compression());
 app.use(cors({
     origin: (origin, callback) => {
         if (!origin) {

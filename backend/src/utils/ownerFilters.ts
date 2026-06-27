@@ -14,6 +14,13 @@ const toObjectIdIfValid = (value?: string | mongoose.Types.ObjectId | null) => {
     return mongoose.isValidObjectId(value) ? new mongoose.Types.ObjectId(value) : value;
 };
 
+// PERF-3: Single helper for team member ID lookup — prevents duplicate User.find
+// queries when multiple filter builders are called on the same request.
+const getTeamMemberIds = async (teamId: mongoose.Types.ObjectId | string) => {
+    const members = await User.find({ teamId }).select('_id');
+    return members.map((m) => m._id);
+};
+
 export const buildTaskOwnerFilter = async (req: AuthRequest): Promise<FilterQuery<ITask>> => {
     const base: FilterQuery<ITask> = {};
     // Enforce tenant isolation
@@ -26,8 +33,8 @@ export const buildTaskOwnerFilter = async (req: AuthRequest): Promise<FilterQuer
     if (scope === 'all' && canViewTeam) return base;
 
     if (scope === 'team' && req.user!.teamId) {
-        const teamMembers = await User.find({ teamId: req.user!.teamId }).select('_id');
-        return { ...base, assignedTo: { $in: teamMembers.map((m) => m._id) } };
+        const memberIds = await getTeamMemberIds(req.user!.teamId as mongoose.Types.ObjectId);
+        return { ...base, assignedTo: { $in: memberIds } };
     }
 
     return { ...base, assignedTo: req.user!._id };
@@ -45,8 +52,8 @@ export const buildActivityOwnerFilter = async (req: AuthRequest): Promise<Filter
     if (scope === 'all' && canViewTeam) return base;
 
     if (scope === 'team' && req.user!.teamId) {
-        const teamMembers = await User.find({ teamId: req.user!.teamId }).select('_id');
-        return { ...base, createdBy: { $in: teamMembers.map((m) => m._id) } };
+        const memberIds = await getTeamMemberIds(req.user!.teamId as mongoose.Types.ObjectId);
+        return { ...base, createdBy: { $in: memberIds } };
     }
 
     return { ...base, createdBy: req.user!._id };
@@ -64,8 +71,8 @@ export const buildCompanyOwnerFilter = async (req: AuthRequest): Promise<Record<
     if (scope === 'all' && canViewTeam) return base;
 
     if (scope === 'team' && req.user!.teamId) {
-        const teamMembers = await User.find({ teamId: req.user!.teamId }).select('_id');
-        return { ...base, createdBy: { $in: teamMembers.map((m) => m._id) } };
+        const memberIds = await getTeamMemberIds(req.user!.teamId as mongoose.Types.ObjectId);
+        return { ...base, createdBy: { $in: memberIds } };
     }
 
     return { ...base, createdBy: req.user!._id };

@@ -123,6 +123,8 @@ const activitySchema = new Schema<IActivity>(
 
 // Indexes for Multi-Tenancy mapping
 activitySchema.index({ tenantId: 1, 'relatedTo.model': 1, 'relatedTo.id': 1 });
+// PERF-4: Supports $lookup in hotNoMeeting query — converts O(n×m) scan to O(log n)
+activitySchema.index({ 'relatedTo.id': 1, activityType: 1, tenantId: 1 });
 activitySchema.index({ tenantId: 1, activityDate: -1 });
 activitySchema.index({ tenantId: 1, nextFollowUpDate: 1 });
 activitySchema.index({ tenantId: 1, createdBy: 1, activityDate: -1 });

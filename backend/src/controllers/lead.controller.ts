@@ -110,7 +110,7 @@ export const getLeads = async (
                 { firstName: searchRegex },
                 { lastName: searchRegex },
                 { email: searchRegex },
-                { companyName: searchRegex }
+                { company: searchRegex }
             ]);
         }
 
@@ -119,15 +119,16 @@ export const getLeads = async (
         const sort: Record<string, 1 | -1> = {};
         sort[sortBy as string] = sortOrder === 'asc' ? 1 : -1;
 
-        const leads = await Lead.find(filter)
-            .populate('assignedTo', 'firstName lastName email avatar')
-            .populate('ownerId', 'firstName lastName email')
-            .populate('createdBy', 'firstName lastName email')
-            .sort(sort)
-            .skip(skip)
-            .limit(limit);
-
-        const total = await leadRepository.count(req.tenantId!, filter);
+        const [leads, total] = await Promise.all([
+            Lead.find(filter)
+                .populate('assignedTo', 'firstName lastName email avatar')
+                .populate('ownerId', 'firstName lastName email')
+                .populate('createdBy', 'firstName lastName email')
+                .sort(sort)
+                .skip(skip)
+                .limit(limit),
+            leadRepository.count(req.tenantId!, filter)
+        ]);
 
         const leadsWithHealth = leads.map((lead) => enrichLeadData(lead));
 
@@ -419,6 +420,9 @@ export const deleteLead = async (
     next: NextFunction
 ): Promise<void> => {
     try {
+        if (!mongoose.isValidObjectId(req.params.id)) {
+            throw new AppError('Invalid lead identifier', 400);
+        }
         const lead = await leadRepository.findById(req.tenantId!, req.params.id);
         if (!lead) {
             throw new AppError('Lead not found or unauthorized access', 404);
@@ -677,7 +681,7 @@ export const getStuckLeads = async (
         }
 
         const leads = await Lead.find(filter)
-            .select('firstName lastName companyName status ownerId assignedTo lastStageChangedAt createdAt')
+            .select('firstName lastName company status ownerId assignedTo lastStageChangedAt createdAt')
             .populate('ownerId', 'firstName lastName email')
             .populate('assignedTo', 'firstName lastName email')
             .sort({ lastStageChangedAt: 1 })
@@ -695,7 +699,7 @@ export const getStuckLeads = async (
             return {
                 leadId: doc._id,
                 name: `${doc.firstName} ${doc.lastName}`.trim(),
-                company: doc.companyName || doc.company,
+                company: doc.company,
                 stage: doc.status,
                 owner: owner
                     ? {

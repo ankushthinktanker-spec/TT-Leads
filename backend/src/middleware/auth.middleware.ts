@@ -28,12 +28,14 @@ function setCachedUser(userId: string, user: IUser): void {
     userCache.set(userId, { user, expiresAt: Date.now() + USER_CACHE_TTL_MS });
 }
 
+// Cleanup at TTL/2 so entries never linger more than 1.5× TTL in memory.
+// Previously 60 000 ms (2× TTL) caused stale entries to live up to 90 s.
 setInterval(() => {
     const now = Date.now();
     for (const [key, entry] of userCache) {
         if (now > entry.expiresAt) userCache.delete(key);
     }
-}, 60_000);
+}, USER_CACHE_TTL_MS / 2).unref();
 
 export interface AuthRequest extends Request {
     user?: IUser;

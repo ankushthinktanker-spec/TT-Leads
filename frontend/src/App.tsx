@@ -30,7 +30,7 @@ const SubscriptionsPage = lazy(() => import('./pages/subscriptions/Subscriptions
 const InvoicesPage = lazy(() => import('./pages/invoices/InvoicesPage'));
 const NotAuthorizedPage = lazy(() => import('./pages/NotAuthorizedPage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
-const MainLayout = lazy(() => import('./components/layout/MainLayout'));
+import MainLayout from './components/layout/MainLayout';
 
 const RouteFallback = () => (
     <div className="min-h-screen bg-[linear-gradient(180deg,#f7faff_0%,#edf3f8_100%)] px-5 py-8">

@@ -1,7 +1,7 @@
-import { FilterQuery } from 'mongoose';
+import mongoose, { FilterQuery } from 'mongoose';
+import Lead, { ILead } from '../models/lead.model';
 import { AppError } from '../middleware/errorHandler';
 import { leadRepository } from '../repositories/lead.repository';
-import { ILead } from '../models/lead.model';
 
 /**
  * LeadService
@@ -65,21 +65,33 @@ export class LeadService {
     }
 
     /**
-     * Example of strict business logic mapping without direct model mutations
+     * Atomically convert a lead to client status.
+     * Uses a conditional filter (status != Won) to prevent double-conversion race conditions.
+     * Uses $set (not a document replacement) to avoid the immutable _id update error.
      */
     async convertLeadToClient(tenantId: string, leadId: string) {
-        const lead = await this.getLeadById(tenantId, leadId);
-        
-        if (lead.status === 'Won') {
+        if (!mongoose.isValidObjectId(leadId)) {
+            throw new AppError('Invalid lead identifier', 400);
+        }
+
+        // Atomic: only updates if status is NOT already 'Won'.
+        // Prevents TOCTOU where two concurrent requests both pass the status check.
+        const updated = await Lead.findOneAndUpdate(
+            { _id: leadId, tenantId, status: { $ne: 'Won' } },
+            { $set: { status: 'Won', lifecycleStage: 'Customer', convertedAt: new Date() } },
+            { new: true, runValidators: true }
+        );
+
+        if (!updated) {
+            // Distinguish between "not found" and "already Won"
+            const existing = await leadRepository.findById(tenantId, leadId);
+            if (!existing) {
+                throw new AppError('Lead not found or unauthorized access', 404);
+            }
             throw new AppError('Lead is already successfully converted', 400);
         }
 
-        // Apply strict lifecycle mutation and use the repository pattern to enforce storage updates.
-        lead.status = 'Won';
-        lead.lifecycleStage = 'Customer';
-        lead.convertedAt = new Date();
-
-        return await leadRepository.updateById(tenantId, leadId, lead.toObject());
+        return updated;
     }
 }
 

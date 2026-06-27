@@ -52,14 +52,17 @@ export const register = async (
 
         const { email, password, firstName, lastName, phone, role, teamId, managerId } = value;
 
-        // Check if user already exists
-        const existingUser = await User.findOne({ email });
-        if (existingUser) {
-            throw new AppError('User with this email already exists', 400);
-        }
-
-        // Inherit tenantId from the creating admin user
+        // Inherit tenantId from the creating admin user (must be resolved before the duplicate check
+        // so the uniqueness check is scoped per-tenant, not globally across all tenants).
         const tenantId = req.tenantId || (req.user?.tenantId ? String(req.user.tenantId) : undefined);
+
+        // Check if user already exists within this tenant scope.
+        // Global User.findOne({ email }) would incorrectly block cross-tenant registrations
+        // where different tenants legitimately share the same email domain.
+        const existingUser = await User.findOne(tenantId ? { email, tenantId } : { email });
+        if (existingUser) {
+            throw new AppError('User with this email already exists in your organization', 400);
+        }
 
         // Create user
         const user = await User.create({
